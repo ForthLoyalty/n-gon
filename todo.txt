@@ -1,54 +1,163 @@
 ******************************************************** NEXT PATCH **************************************************
 
-nitinol skin tech: ledge grab upgraded to full wall grab and wall jump
-  wall grab will hold hold the player in place with left and right keys
-  nitinol no longer has higher jumps
-  nitinol can no long get acoustic levitation
-
-Higgs mechanism gets 1.3x jumps, but 4->3x fire rate
-mass-energy equivalence has 1.2 movement
-quenching gives 0.5->0.6x overheal to max health
-
-alternate trainBoss2 on corridor level with yellow beams
-the moving platform on towers level comes consistently after 2-3 seconds to reduce the wait
+tech: Casimir effect - mobs have a chance to drop power ups that give max energy
+tech: Lie group - merge small power ups into Casimir
+tech: van der Waals force - Casimir power ups also give max health
+tech: vacuum energy - after using a coupling, boost, Casimir, research, heal, or ammo power up randomly set energy to 0 or max energy
+ionization energy converts heal power ups to Casimir power ups (15->10 max energy)
+  ergodicity and adiabatic effect Casimir power ups
+mass production now has options for coupling and Casimir power ups
 
 bug fixes
-  Cordyceps no longer eats dark matter
-  shotgun laser graphical glitch with laser lens
+  testing optimization, not setting declaring tech variables on game start
+  Halbach + tokamak crash
+  interest on subway is back to full % since it no longer has doors
 
 *********************************************************** TODO *****************************************************
 
-should blocks block mobs and bullets?
-  is this too easy to cheese by holding a huge block
-    maybe drain energy when the block you hold hits a mob...
+add gradients to performance mode
+  plasma ball
+  tungsten carbide
 
-rework martingale?
-  it's really strong, but people may not understand how to use it.
-  how to be true to the name (where you gamble by doubling your bet)
+make orbital bots have an elliptical orbit that precesses
 
-performance issue with experiment mode
-  causes my computer fan to turn on when I leave it on for a few minutes
-    maybe do a performance test in dev tools
-  fixes?
-    remove some CSS animations
-      cloaking
-      choices
-    find a way to not draw things off screen?
-    something might be changing size and forcing a redraw of everything
+tech: plating- at the start of each level gain 0.25 damage reduction, slowly lose this effect over 40 seconds
 
-new constraint - see hallucinations
-  draw shapes that don't exists that look like
-    mobs
-    map
-    power ups?
-    blocks?
-  shapes end
-    fade over time?
-    fade when player gets close?
+Grenade- grenades bounce # number of times, detonating 1 second after final bounce (You ever play overwatch? pretty much junkrat in terms of how the grenade bounces)
 
-perfect diamagnetism tech:   - using field while crouching will pull in blocks
-  releasing field will fire the blocks  (like control)
-  very strong, but high energy cost
+in the pause/experiment menus clicking on tech,guns,field orbs with produce text to speech of it's name
+  !a second click will read the description?
+    how to convert html to readable text??
+
+sort text input is broken in pause menu
+  does nothing on clicking sort or pressing enter
+  pressing P, O  breaks it
+  add more buttons
+    duplication
+    research, coupling
+    bot tech
+    JUNK
+  
+
+replace damage side bar with a number?
+  where: red text above tech list
+  changing numbers might get distracting?
+replace damage reduction with a number?
+  I actually like this bar, so maybe don't replace
+  where
+    white text above health bar?
+    inside health bar?
+
+tech: - at the end of each level get 40% of current gun's ammo
+  requires interest
+
+tech:  - at the end of each level if you have no guns....
+  get a bot? 
+  1.2x damage
+
+tech:  - if you have no field get....
+
+try to also allow players to unpause in choosing menu
+
+
+web lines - putting down lines that last maybe 10-20 seconds that slow and damage mobs.
+  plasma field tech? maybe when the plasma globe explodes make web lines
+  plasma extruder could make lines when it kills a mob?
+  wormhole tech? when you teleport you leave a web behind?
+  spore tech? (when sporangium hatch they shoot out a few web lines that slow nearby mobs?
+  ***most obvious is grappling hook tech: grappling hook leaves behind web lines
+
+add an HTML input in the tech description(slider or checkbox, dropdown menu,  other inputs)
+  put html slider in tech description, adjust when paused
+  it will control some property that is sometimes better at different values
+    checkboxes or sliders for drone priorities
+      power ups
+      bosses
+      range
+    convert all bots to a type with dropdown menu
+      or change what bots are upgraded to
+    cost benefit trades with slider
+      bot or drone AI behaviors
+        range - frequency
+      health - energy
+      dmg - dmg reduction
+
+consider making pause menu a grid, like experiment mode
+  this could be an setting to toggle off/on
+
+ngon means tasty in vietnamese
+  make a JUNK tech around this?
+
+new level - ducts
+  wind effect
+    push player in a direction
+      push less if on ground or crouching or holding block
+    graphics?
+      draw a line and move it in the direction of wind
+  tunnels with wind
+    change wind direction with button?
+      maybe two buttons that alternate the direction like on the map corridor
+    fire from furnace level fills some of the tunnels and some of the zones
+      player needs to press buttons to switch the furnace off
+        but it only stays off for a short time
+  maybe some spinners that look like fans
+
+filament
+  tech: - filament tip is drawn towards blocks?, power ups?, mobs?
+    and does something good when it touches them
+      maybe isoWave360
+
+tubeWormBoss T4 or T5
+
+zoom in/out when choosing power ups
+  interactions with other zoom actions
+    zoom at start of level  (this could be instant)
+
+do something with powerUps.totalUsed
+  give dmg for each power up used this game?
+
+make a new power up that is
+  small and white
+  large and orange or red
+  unlock with a tech
+  effect?
+    temporary buff, like boost
+    something that you collect and build up and effect, like coupling
+
+use the horizontal vibration effect on a mob or gun or level effect
+  ctx.translate((simulation.cycle % 2) * 8, 0);
+
+mob attack - crash on top of player when above
+  mob flies towards player, but aims for a space above the player (if there is no map of body elements int the way)
+mob attack - run towards player when in same vertical row
+
+make more Cordyceps/zombie tech?
+  spawn zombie in other ways?
+  tech that buff zombies?
+    zombies move with you to next zone?
+      this is tricky because zombies hurt you when they touch, so where should they spawn?
+      
+show stats for popular tech choices
+  in splash screen?
+  track other stats?
+
+tech: - if player has missile bot and a few other bots
+  convert up to 10 other bots into missile bot
+  convert all your guns into missile bots
+
+constraint ideas
+  0.66x fire rate
+  blocks are converted to mobs
+    similar to blockBoss code
+  no pause while choosing?
+    this was removed because it had issues with full screen
+
+Boltzmann brain
+  do something with a low probability to occur.
+    remove the level and get rid of player legs?
+      convert with ship tech
+    chance to spawn something good?
+  JUNK tech?
 
 gun tech upgrade that rewards pressing fire with a precise rhythm
   press fire every 2-3 seconds and each time you get a "perfect" rhythm
@@ -95,13 +204,6 @@ new boss - murmuration of small mobs (maybe 30-50)
       use seePlayerByHistory to set goal for the murmuration
         if one mob can't see goal have them target other mobs in the murmuration
     if no more mobs left on death spawn power ups
-
-diagetic letters
-  initial
-    !added instructions for inputs
-      maybe only if new player...
-    !let player know what lore chapter they are on
-      especially pacifist chapter
 
 tech, field? base game? - doing damage heals 1x (less?) of the last damage taken
   so you can't heal if you take damage twice before doing enough damage
@@ -1437,8 +1539,6 @@ possible names for tech
   stochastic optimization
   electrostatic discharge
   Gödel's incompleteness
-  counterfactual - something false
-  regression to the mean
   phlogiston theory is a superseded scientific theory that postulated the existence of a fire-like element called phlogiston
   Laplace's demon was a notable published articulation of causal determinism on a scientific basis by Pierre-Simon Laplace in 1814.[1] According to determinism, if someone (the demon) knows the precise location and momentum of every atom in the universe, their past and future values for any given time are entailed; they can be calculated from the laws of classical mechanics.
   evolutionary cosmology
@@ -1511,6 +1611,12 @@ possible names for tech
   gravity wave - 
   tuple - a finite list
   Navier–Stokes - equations for the movement of fluids
+  renormalization
+  fractal dimension - maybe for surface area?
+  self-locating uncertainty - something related to anthropic principle, or many worlds
+  ontic - real (maybe something with research)
+  epistemic - knowledge about whats real, but not strictly real... (maybe something with research)
+
 
 
 ******************************************************** UNSOLVED BUGS ********************************************************
