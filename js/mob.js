@@ -23,9 +23,11 @@ const mobs = {
             for (let j = 1, len = vertices.length; j < len; ++j) ctx.lineTo(vertices[j].x, vertices[j].y);
             ctx.lineTo(vertices[0].x, vertices[0].y);
             ctx.fillStyle = mob[i].fill;
-            ctx.strokeStyle = mob[i].stroke;
             ctx.fill();
-            ctx.stroke();
+            if (mob[i].stroke !== "transparent") {
+                ctx.strokeStyle = mob[i].stroke;
+                ctx.stroke();
+            }
         }
     },
     statusSlow(who, cycles = 60) {
@@ -172,10 +174,60 @@ const mobs = {
     },
     statusDoT(who, tickDamage, cycles = 180) {
         if (!who.isShielded && who.alive && who.damageReduction > 0) {
+            if (who.status.length >= 20) {
+                let dotCount = 0;
+                let lastDot = null;
+                let mergedDot = null;
+                for (let i = 0; i < who.status.length; i++) {
+                    const status = who.status[i];
+                    if (status.type === "dot") {
+                        dotCount++;
+                        lastDot = status;
+                        if (status.stacks > 1) mergedDot = status;
+                    }
+                }
+                if (dotCount >= 20) {
+                    const dot = mergedDot || lastDot;
+                    // checkStatus runs the effect before removing it, including on endCycle + 1.
+                    const incomingTicks = Math.max(0, Math.floor((cycles - 28) / 30) + 1);
+                    if (incomingTicks === 0) return;
+                    const incomingStart = simulation.cycle + 29;
+                    const incomingEnd = incomingStart + 30 * (incomingTicks - 1);
+                    let nextTick = dot.startCycle + 30 * Math.max(0, Math.ceil((simulation.cycle - dot.startCycle) / 30));
+                    if (nextTick === dot.lastTickCycle) nextTick += 30;
+                    const remainingTicks = Math.max(0, Math.floor((dot.endCycle + 1 - nextTick) / 30) + 1);
+                    const remainingDamage = remainingTicks > 0 ? dot.dmg * remainingTicks : 0;
+                    const incomingDamage = tickDamage * incomingTicks;
+                    const totalDamage = remainingDamage + incomingDamage;
+                    const oldStacks = remainingTicks > 0 ? dot.stacks : 0;
+                    const oldEnd = dot.mergeEndCycle ?? nextTick + 30 * (remainingTicks - 1);
+                    // Weight the finish time by unspent damage; retain the unrounded average across merges.
+                    const incomingWeight = remainingDamage === Infinity ? (incomingDamage === Infinity ? 0.5 : 0) :
+                        incomingDamage === Infinity ? 1 : totalDamage > 0 ? incomingDamage / totalDamage : 1 / (oldStacks + 1);
+                    const averageEnd = remainingTicks > 0 ? oldEnd + (incomingEnd - oldEnd) * incomingWeight : incomingEnd;
+                    // Keep the pending tick instead of postponing damage every time another hit arrives.
+                    if (remainingTicks === 0) nextTick = incomingStart;
+                    const ticks = Math.max(1, Math.round((averageEnd - nextTick) / 30) + 1);
+                    dot.dmg = totalDamage / ticks;
+                    dot.startCycle = nextTick;
+                    dot.endCycle = nextTick + 30 * (ticks - 1);
+                    dot.mergeEndCycle = averageEnd;
+                    dot.stacks = oldStacks + 1;
+                    return;
+                }
+            }
             who.status.push({
                 effect() {
-                    if ((simulation.cycle - this.startCycle) % 30 === 0) {
+                    if (simulation.cycle >= this.startCycle && (simulation.cycle - this.startCycle) % 30 === 0) {
+                        this.lastTickCycle = simulation.cycle;
                         let dmg = tech.radioactiveDamage * this.dmg
+                        if (tech.isRadStackDamage) {
+                            let stackCount = who.status.length;
+                            for (let i = 0; i < who.status.length; i++) {
+                                if (who.status[i].type === "dot") stackCount += who.status[i].stacks - 1;
+                            }
+                            dmg *= 1 + 0.07 * stackCount;
+                        }
                         if (who.damageReduction === 0) {
                             this.endCycle = 0 //invulnerability clears radiation
                             simulation.drawList.push({ //add dmg to draw queue
@@ -200,6 +252,9 @@ const mobs = {
                 },
                 endEffect() { },
                 dmg: tickDamage,
+                stacks: 1, //logical radiation stacks for decay chain, even when represented by one effect
+                lastTickCycle: -Infinity,
+                mergeEndCycle: null,
                 type: "dot",
                 endCycle: simulation.cycle + cycles,
                 startCycle: simulation.cycle + 29 //makes sure it doesn't tick on first application
@@ -371,14 +426,14 @@ const mobs = {
             },
             seePlayerByHistory(depth = 30) { //depth max 60?  limit of history
                 if (!(simulation.cycle % this.seePlayerFreq)) {
-                    if (Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 && !m.isCloak) {
+                    if (!Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) && !m.isCloak) {
                         this.foundPlayer();
                     } else if (this.seePlayer.recall) {
                         this.lostPlayer();
                         if (!m.isCloak) {
                             for (let i = 0; i < depth; i++) { //if lost player lock onto a player location in history
                                 let history = m.history[(simulation.cycle - 10 * i) % 600]
-                                if (Matter.Query.ray(map, this.position, history.position).length === 0) {
+                                if (!Matter.Query.rayAny(map, this.position, history.position)) {
                                     this.seePlayer.recall = this.memory + Math.round(this.memory * Math.random()); //cycles before mob falls a sleep
                                     this.seePlayer.position.x = history.position.x;
                                     this.seePlayer.position.y = history.position.y;
@@ -401,7 +456,7 @@ const mobs = {
                 if (!(simulation.cycle % this.seePlayerFreq)) {
                     if (
                         this.distanceToPlayer2() < this.seeAtDistance2 &&
-                        Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
+                        !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
                         // Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0 &&
                         !m.isCloak
                     ) {
@@ -423,7 +478,7 @@ const mobs = {
             seePlayerByDistOrLOS() {
                 if (!(simulation.cycle % this.seePlayerFreq)) {
                     if (
-                        (this.distanceToPlayer2() < this.seeAtDistance2 || (Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0)) && //&& Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                        (this.distanceToPlayer2() < this.seeAtDistance2 || (!Matter.Query.rayAny(map, this.position, this.playerPosRandomY()))) && //&& Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
                         !m.isCloak
                     ) {
                         this.foundPlayer();
@@ -451,7 +506,7 @@ const mobs = {
                 if (!(simulation.cycle % this.seePlayerFreq) && (this.seePlayer.recall || this.isLookingAtPlayer(this.lookRange))) {
                     if (
                         this.distanceToPlayer2() < this.seeAtDistance2 &&
-                        Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
+                        !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
                         // Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0 &&
                         !m.isCloak
                     ) {
@@ -518,8 +573,8 @@ const mobs = {
                     ctx.setLineDash([125 * Math.random(), 125 * Math.random()]);
                     // ctx.lineDashOffset = 6*(simulation.cycle % 215);
                     if (this.distanceToPlayer() < this.laserRange) {
-                        if (m.immuneCycle < m.cycle) {
-                            m.takeDamage(0.0003 * this.damageScale());
+                        if (m.immuneCycle < m.cycle && !(m.cycle % 15)) {
+                            m.takeDamage(0.0045 * this.damageScale());
                             if (m.energy > 0.1) m.energy -= 0.003
                         }
                         ctx.beginPath();
@@ -555,9 +610,8 @@ const mobs = {
                 ctx.fill();
 
                 //check for wing -> player damage
-                const hitPlayer = Matter.Query.ray([player], this.position, Vector.add(this.position, Vector.mult(perp, radius * 2.05)), minorRadius)
-                if (hitPlayer.length && m.immuneCycle < m.cycle) {
-                    m.takeDamage(dmg * this.damageScale());
+                if (Matter.Query.rayAny([player], this.position, Vector.add(this.position, Vector.mult(perp, radius * 2.05)), minorRadius) && m.immuneCycle < m.cycle) {
+                    if (!(m.cycle % 10)) m.takeDamage(10 * dmg * this.damageScale());
                     // if (m.immuneCycle < m.cycle + immuneTime) m.immuneCycle = m.cycle + immuneTime; //player is immune to damage
 
                     //push player away
@@ -589,8 +643,8 @@ const mobs = {
                     if (
                         (this.seePlayer.recall || this.isLookingAtPlayer(this.lookRange)) &&
                         this.distanceToPlayer2() < this.seeAtDistance2 &&
-                        Matter.Query.ray(map, this.position, player.position).length === 0 &&
-                        Matter.Query.ray(body, this.position, player.position).length === 0 &&
+                        !Matter.Query.rayAny(map, this.position, player.position) &&
+                        !Matter.Query.rayAny(body, this.position, player.position) &&
                         !m.isCloak
                     ) {
                         this.foundPlayer();
@@ -602,7 +656,7 @@ const mobs = {
             springAttack() {
                 // set new values of the ends of the spring constraints
                 const stepRange = 600
-                if (this.seePlayer.recall && Matter.Query.ray(map, this.position, this.seePlayer.position).length === 0) {
+                if (this.seePlayer.recall && !Matter.Query.rayAny(map, this.position, this.seePlayer.position)) {
                     if (!(simulation.cycle % (this.seePlayerFreq * 2))) {
                         const unit = Vector.normalise(Vector.sub(this.seePlayer.position, this.position))
                         const goal = Vector.add(this.position, Vector.mult(unit, stepRange))
@@ -901,8 +955,8 @@ const mobs = {
                 if (
                     !(simulation.cycle % this.fireFreq) &&
                     Math.abs(this.position.x - this.seePlayer.position.x) < 400 && //above player
-                    Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 && //see player
-                    Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                    !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) && //see player
+                    !Matter.Query.rayAny(body, this.position, this.playerPosRandomY())
                 ) {
                     spawn.bomb(this.position.x, this.position.y + this.radius * 0.7, 9 + Math.ceil(this.radius / 15), 5);
                     //add spin and speed
@@ -977,7 +1031,11 @@ const mobs = {
             },
             explode(mass = this.mass) {
                 if (m.immuneCycle < m.cycle) {
-                    m.takeDamage(Math.min(Math.max(0.03 * Math.sqrt(mass), 0.01), 0.4) * this.damageScale());
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            m.takeDamage(Math.min(Math.max(0.03 * Math.sqrt(mass), 0.01), 0.4) * this.damageScale())
+                        })
+                    })
                     this.isDropPowerUp = false;
                     this.death(); //death with no power up or body
                 }
@@ -992,7 +1050,8 @@ const mobs = {
             damageScale() {
                 return ((spawn.mobDmgDoneByTier[this.tier] && level.levelsCleared < 14) ? spawn.mobDmgDoneByTier[this.tier] : spawn.dmgToPlayerByLevelsCleared())
             },
-            damage(dmg, isBypassShield = false) { //damage taken by this mob 
+            dmgLog: 0, //used to record damage done to mob for producing damage numbers
+            damage(dmg, isBypassShield = false, where = this.position, isDmgText = false) { //damage taken by this mob 
                 if ((!this.isShielded || isBypassShield) && this.alive) {
                     if (dmg !== Infinity) {
                         dmg *= tech.damageAdjustments()
@@ -1108,15 +1167,29 @@ const mobs = {
                                 })
                             }
                         }
+                        if (tech.isNegAura && m.fieldMode === 3 && this.health < 0.6 && Vector.magnitude(Vector.sub(m.pos, this.position)) < (m.fieldDrawRadius + 2 * this.radius + 20)) {
+                            dmg *= 8
+                            simulation.ephemera.push({
+                                count: 3, //cycles before it self removes
+                                vertices: this.vertices,
+                                do() {
+                                    this.count--
+                                    if (this.count < 0) simulation.removeEphemera(this)
 
-                        //mobs specific damage changes
-                        if (this.tier && level.levelsCleared < 14) {
-                            dmg *= spawn.mobDmgTakenByTier[this.tier] //scale by tier
-                        } else {
-                            dmg *= spawn.mobDmgTakenByLevelsCleared() //scale by level.levelsCleared if no tier
+                                    ctx.beginPath();
+                                    ctx.moveTo(this.vertices[0].x, this.vertices[0].y);
+                                    for (let j = 1, len = this.vertices.length; j < len; j += 1) ctx.lineTo(this.vertices[j].x, this.vertices[j].y);
+                                    ctx.lineTo(this.vertices[0].x, this.vertices[0].y);
+                                    ctx.lineWidth = 10;
+                                    ctx.strokeStyle = `#f07`;
+                                    ctx.stroke();
+                                    ctx.lineJoin = "round"
+                                    ctx.miterLimit = 5
+                                    ctx.fillStyle = "#000"
+                                    ctx.fill();
+                                },
+                            })
                         }
-                        dmg *= this.damageReduction //damage reduction specific to this mob (not based on tier)
-
                         if (tech.isFarAwayDmg) dmg *= 1 + Math.sqrt(Math.max(500, Math.min(3000, this.distanceToPlayer())) - 500) * 0.0067 //up to 33% dmg at max range of 3000
                         //energy and heal drain should be calculated after damage boosts and before mass reduction
                         if (tech.energySiphon && this.isDropPowerUp && m.immuneCycle < m.cycle) {
@@ -1132,9 +1205,23 @@ const mobs = {
                                 }
                             }
                         }
-                        dmg /= Math.sqrt(this.mass)
-                    }
+                        if (localSettings.showDmgNumbers && this.damageReduction > 0) {
+                            if (isDmgText) {
+                                simulation.dmgNumbers(where, Math.ceil(dmg).toFixed(0))
+                            } else {
+                                this.dmgLog += dmg
+                            }
+                        }
 
+                        //mobs specific damage changes
+                        if (this.tier && level.levelsCleared < 14) {
+                            dmg *= spawn.mobDmgTakenByTier[this.tier] //scale by tier
+                        } else {
+                            dmg *= spawn.mobDmgTakenByLevelsCleared() //scale by level.levelsCleared if no tier
+                        }
+                        dmg /= Math.sqrt(this.mass)
+                        dmg *= this.damageReduction
+                    }
                     this.health -= dmg
                     //this.fill = this.color + this.health + ')';
                     this.onDamage(dmg); //custom damage effects
@@ -1184,9 +1271,35 @@ const mobs = {
                 this.onDeath(this); //custom death effects
                 this.removeConsBB();
                 this.alive = false; //triggers mob removal in mob[i].replace(i)
-                // console.log(this.shieldCount)
+
+                if (localSettings.showDmgNumbers && this.dmgLog) {
+                    simulation.ephemera.push({
+                        count: 0, //cycles before it self removes
+                        dmg: Math.ceil(this.dmgLog).toFixed(0),
+                        where: { x: this.position.x, y: this.position.y - this.radius * 1.4 - 13 },
+                        drift: { x: (0.6 * Math.random()) * (Math.random() < 0.5 ? -1 : 1), y: 0.7 + 0.4 * Math.random() },
+                        do() {
+                            this.count++
+                            if (this.count > 40) {
+                                simulation.removeEphemera(this)
+                            } else {
+                                ctx.font = "50px Arial"; //monospace
+                                ctx.fillStyle = `rgba(255, 0, 17,${(40 - this.count) / 20})`;
+                                // ctx.textBaseline = "middle";
+                                ctx.fillText(this.dmg, this.where.x + this.count * this.drift.x, this.where.y - 40 - this.count * this.drift.y);
+
+                            }
+                        },
+                    })
+                }
+                this.dmgLog = 0
 
                 if (this.isDropPowerUp) {
+                    if (m.alive && level.isMobDeathFreeze && !this.isFreezeAuraOnDeath) {
+                        requestAnimationFrame(() => {
+                            spawn.freezeGrenade(this.position.x, this.position.y, this.tier, 60) //freezeGrenade(x, y, tier = null, lifeSpan = 90, pulseRadius = 230 + 10 * tier, size = 3) {
+                        });
+                    }
                     if (level.isMobDeathHeal) {
                         for (let i = 0; i < mob.length; i++) {
                             if (Vector.magnitudeSquared(Vector.sub(this.position, mob[i].position)) < 500000 && mob[i].alive) { //700
@@ -1287,7 +1400,7 @@ const mobs = {
                     if (tech.isVerlet && !m.isTimeDilated) {
                         if (tech.isBarycenter) {
                             b.orbitBot(player.position, false);
-                            bullet[bullet.length - 1].endCycle = simulation.cycle + 1080
+                            bullet[bullet.length - 1].endCycle = simulation.cycle + 1200
                         }
 
                         requestAnimationFrame(() => {
@@ -1343,7 +1456,7 @@ const mobs = {
                             for (let i = 0; i < amount; i++) b.spore(this.position)
                         }
                     }
-                    if (tech.isChitin) {
+                    if (tech.isChitin && tech.wire) {
                         // add new segment where the current tip is
                         for (let i = 0; i < 2; i++) {
                             if (tech.wire.segments.length < 200) { //cap max length at 200 for performance

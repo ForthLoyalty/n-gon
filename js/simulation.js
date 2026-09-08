@@ -3,7 +3,9 @@
 const simulation = {
     loop() { }, //main game loop, gets set to normal or testing loop
     normalLoop() {
+        level.exit.isDrawPending = false;
         simulation.gravity();
+        // level.mirrorDoors.update();
         Engine.update(engine, simulation.delta);
         simulation.wipe();
         simulation.textLog();
@@ -31,11 +33,15 @@ const simulation = {
         if (!m.isTimeDilated) b.bulletDo();
         simulation.drawCircle();
         simulation.runEphemera();
+        // level.mirrorDoorsDraw();
+        if (level.exit.isDrawPending) level.exit.drawAndCheck(true);
         ctx.restore();
         simulation.drawCursor();
     },
     testingLoop() {
+        level.exit.isDrawPending = false;
         simulation.gravity();
+        // level.mirrorDoors.update();
         Engine.update(engine, simulation.delta);
         simulation.wipe();
         simulation.textLog();
@@ -52,6 +58,7 @@ const simulation = {
         m.hold();
         level.customTopLayer();
         simulation.draw.wireFrame();
+        // level.mirrorDoorsDraw();
         if (input.fire && m.fireCDcycle < m.cycle) {
             m.fireCDcycle = m.cycle + 15; //fire cooldown       
             for (let i = 0, len = mob.length; i < len; i++) {
@@ -65,6 +72,7 @@ const simulation = {
         simulation.drawCircle();
         simulation.runEphemera();
         simulation.constructCycle()
+        if (level.exit.isDrawPending) level.exit.drawAndCheck(true);
         ctx.restore();
         simulation.testingOutput();
         simulation.drawCursor();
@@ -76,6 +84,7 @@ const simulation = {
             simulation.cycle++;
             m.cycle++;
             simulation.gravity();
+            // level.mirrorDoors.update();
             Engine.update(engine, simulation.delta);
             if (m.onGround) {
                 m.groundControl()
@@ -93,6 +102,7 @@ const simulation = {
             b.bulletDo();
             simulation.runEphemera();
         }
+        simulation.draw.flushMapPathRebuild();
         simulation.isTimeSkipping = false;
     },
     timePlayerSkip(cycles = 60) {
@@ -101,6 +111,7 @@ const simulation = {
             simulation.cycle++;
             // m.walk_cycle += (m.flipLegs * m.Vx) * 0.5; //makes the legs look like they are moving fast this is just gonna run for each method call since it needs some tweaking
             simulation.gravity();
+            // level.mirrorDoors.update();
             Engine.update(engine, simulation.delta);
             // level.custom();
             // level.customTopLayer();
@@ -131,7 +142,8 @@ const simulation = {
         }
     },
     runEphemera() {
-        for (let i = 0; i < simulation.ephemera.length; i++) {
+        // for (let i = 0; i < simulation.ephemera.length; i++) {
+        for (let i = simulation.ephemera.length - 1; i >= 0; i--) {
             simulation.ephemera[i].do();
         }
     },
@@ -190,6 +202,7 @@ const simulation = {
     fpsCap: null, //limits frames per second to 144/2=72,  on most monitors the fps is capped at 60fps by the hardware
     fpsCapDefault: 72, //use to change fpsCap back to normal after a hit from a mob
     isCommunityMaps: false,
+    isStartingGame: false,
     cyclePaused: 0,
     fallHeight: 6000, //below this y position the player will teleport to start, take damage, or teleport to the sky based on the value of  level.fallMode
     lastTimeStamp: 0, //tracks time stamps for measuring delta
@@ -346,6 +359,32 @@ const simulation = {
         }
         document.getElementById("right-HUD").innerHTML = text
     },
+    dmgNumbers(where, dmg, color = "rgba(255, 0, 17,", size = 45, isOutline = false) {
+        if (localSettings.showDmgNumbers && dmg > 0) {
+            simulation.ephemera.push({
+                count: 0,
+                drift: { x: (0.6 * Math.random()) * (Math.random() < 0.5 ? -1 : 1), y: 1 + 0.5 * Math.random() },
+                font: `${size}px Arial`,
+                do() {
+                    this.count++
+                    if (this.count > size) {
+                        simulation.removeEphemera(this)
+                    } else {
+                        const opacity = Math.max(0, (2 * (60 - this.count)) / 60)
+                        ctx.fillStyle = `${color}${opacity})`;
+                        ctx.font = this.font;
+                        pos = Vector.add(where, Vector.mult(this.drift, -this.count))
+                        if (isOutline) {
+                            ctx.strokeStyle = `rgba(0,0,0,${opacity})`//"#000"
+                            ctx.lineWidth = 2;
+                            ctx.strokeText(dmg, pos.x, pos.y);
+                        }
+                        ctx.fillText(dmg, pos.x, pos.y);
+                    }
+                },
+            })
+        }
+    },
     lastLogTime: 0,
     isTextLogOpen: true,
     consoleLength: 0,
@@ -403,6 +442,7 @@ const simulation = {
         } else {
             simulation.drawCursor = simulation.drawCursorBasic
         }
+        // b.setFireMethod()
     },
     zoom: null,
     zoomScale: 1000,
@@ -682,38 +722,6 @@ const simulation = {
             }
         }, len * swapPeriod);
     },
-    // warp(translation = 5, skew = 0.05, scale = 0.05) {
-    // if (simulation.cycle % 2) { //have to alternate frames or else successive rumbles over write the effects of the previous rumble
-    // requestAnimationFrame(() => { ctx.setTransform(1, 0, 0, 1, 0, 0); }) //reset
-    // requestAnimationFrame(() => {
-    //     if (!simulation.paused && m.alive) {
-    //         ctx.transform(1 - scale * (Math.random() - 0.5), skew * (Math.random() - 0.5), skew * (Math.random() - 0.5), 1 - scale * (Math.random() - 0.5), translation * (Math.random() - 0.5), translation * (Math.random() - 0.5)); //ctx.transform(Horizontal scaling. A value of 1 results in no scaling,  Vertical skewing,   Horizontal skewing,   Vertical scaling. A value of 1 results in no scaling,   Horizontal translation (moving),   Vertical translation (moving)) //https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/setTransform
-    //     }
-    // })
-
-    //reset
-    // ctx.transform(1, 0, 0, 1, 0, 0); //ctx.transform(Horizontal scaling. A value of 1 results in no scaling,  Vertical skewing,   Horizontal skewing,   Vertical scaling. A value of 1 results in no scaling,   Horizontal translation (moving),   Vertical translation (moving)) //https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/setTransform
-
-    // }
-    // const loop = () => {
-    //     if (!simulation.paused && m.alive) {
-    //         ctx.save();
-    //         ctx.transform(1 - scale * (Math.random() - 0.5), skew * (Math.random() - 0.5), skew * (Math.random() - 0.5), 1 - scale * (Math.random() - 0.5), translation * (Math.random() - 0.5), translation * (Math.random() - 0.5)); //ctx.transform(Horizontal scaling. A value of 1 results in no scaling,  Vertical skewing,   Horizontal skewing,   Vertical scaling. A value of 1 results in no scaling,   Horizontal translation (moving),   Vertical translation (moving))
-    //         requestAnimationFrame(() => { ctx.restore(); })
-    //     }
-    // }
-    // requestAnimationFrame(loop);
-
-    // function loop() {
-    //     if (!simulation.paused && m.alive) {
-    //         ctx.save();
-    //         ctx.transform(1 - scale * (Math.random() - 0.5), skew * (Math.random() - 0.5), skew * (Math.random() - 0.5), 1 - scale * (Math.random() - 0.5), translation * (Math.random() - 0.5), translation * (Math.random() - 0.5)); //ctx.transform(Horizontal scaling. A value of 1 results in no scaling,  Vertical skewing,   Horizontal skewing,   Vertical scaling. A value of 1 results in no scaling,   Horizontal translation (moving),   Vertical translation (moving))
-    //         requestAnimationFrame(() => { ctx.restore(); })
-    //     }
-    //     requestAnimationFrame(loop);
-    // }
-    // requestAnimationFrame(loop);
-    // },
     wipe() { }, //set in simulation.startGame
     gravity() {
         function addGravity(bodies, magnitude) {
@@ -767,7 +775,6 @@ const simulation = {
         document.getElementById("dmg").style.display = "none";
         document.getElementById("health-bg").style.display = "none";
         document.getElementById("defense-bar").style.display = "none"
-        document.getElementById("damage-bar").style.display = "none"
         document.body.style.cursor = "auto";
         setTimeout(() => {
             document.getElementById("experiment-button").style.opacity = "1";
@@ -779,7 +786,19 @@ const simulation = {
     },
     fpsInterval: 0, //set in startGame
     then: null,
-    startGame(isBuildRun = false, isTrainingRun = false) {
+    async startGame(isBuildRun = false, isTrainingRun = false) {
+        if (simulation.isStartingGame) return
+        simulation.isStartingGame = true
+        if (simulation.isCommunityMaps || isTrainingRun) {
+            try {
+                await level.loadMoreLevels()
+            } catch (error) {
+                simulation.isStartingGame = false
+                console.error(error)
+                return
+            }
+        }
+        simulation.isStartingGame = false
         if (localSettings.isHideHUD) {
             simulation.draw.body = function () {
                 ctx.beginPath();
@@ -826,11 +845,9 @@ const simulation = {
         if (!localSettings.isHideHUD) {
             document.getElementById("right-HUD").style.display = "inline"
             document.getElementById("defense-bar").style.display = "inline"
-            document.getElementById("damage-bar").style.display = "inline"
         } else {
             document.getElementById("right-HUD").style.display = "none"
             document.getElementById("defense-bar").style.display = "none"
-            document.getElementById("damage-bar").style.display = "none"
         }
         document.getElementById("guns").style.display = "inline"
         document.getElementById("field").style.display = "inline"
@@ -920,9 +937,10 @@ const simulation = {
         m.onGround = false
         // m.groundCount = 0
         m.lastOnGroundCycle = 0
-        m.health = 0;
+        // m.addHealth(0.25)
+        m.health = 0.25;
+
         level.isLowHeal = false
-        m.addHealth(0.25)
         m.drop();
         m.holdingTarget = null
 
@@ -958,8 +976,6 @@ const simulation = {
                         }
                         const damage = tech.damageAdjustments() //update damage bar
                         if (m.lastCalculatedDamage !== damage) {
-                            document.getElementById("damage-bar").style.height = Math.floor((Math.atan(0.25 * damage - 0.25) + 0.25) * 0.5 * canvas.height) + "px";
-                            // document.getElementById("damage-num").innerHTML = `${damage.toFixed(2)}x dmg`
                             m.lastCalculatedDamage = damage
                         }
                     }
@@ -968,6 +984,16 @@ const simulation = {
         }
         simulation.ephemera.push({
             name: "checks", count: 0, do() {
+
+                if (localSettings.showDmgNumbers && !(m.cycle % 30)) {
+                    for (let i = 0; i < mob.length; i++) {
+                        if (mob[i].dmgLog) {
+                            simulation.dmgNumbers({ x: mob[i].position.x, y: mob[i].position.y - mob[i].radius * 1.4 }, Math.ceil(mob[i].dmgLog).toFixed(0), "rgba(255, 30, 67,", 40)
+                            mob[i].dmgLog = 0
+                        }
+                    }
+                }
+
                 if (!(m.cycle % 60)) { //once a second
                     //energy overfill 
                     if (m.energy > m.maxEnergy) {
@@ -1015,7 +1041,7 @@ const simulation = {
                             })
                             const before = { x: player.position.x, y: player.position.y, }
                             const posXClamped = Math.min(Math.max(level.fallModeBounds.left, player.position.x), level.fallModeBounds.right)
-                            Matter.Body.setPosition(player, { x: posXClamped, y: level.enter.y - 4000 });
+                            Matter.Body.setPosition(player, { x: posXClamped, y: level.enter.y - 6000 });
 
                             // translate camera smoothly to preserve illusion to endless fall
                             const change = { x: before.x - posXClamped, y: before.y - player.position.y }
@@ -1070,13 +1096,13 @@ const simulation = {
                     if (!(m.cycle % 420)) { //once every 7 seconds
                         //check if player is inside the map
 
-                        if (Matter.Query.ray(map, m.pos, player.position).length > 0) {
+                        if (Matter.Query.rayAny(map, m.pos, player.position)) {
                             // if (Matter.Query.point(map, m.pos).length > 0 || Matter.Query.point(map, player.position).length > 0) {
                             //check for the next few seconds to see if being stuck continues
                             simulation.ephemera.push({
                                 count: 240, //cycles before it self removes
                                 do() {
-                                    if (Matter.Query.ray(map, m.pos, player.position).length > 0) {
+                                    if (Matter.Query.rayAny(map, m.pos, player.position)) {
                                         this.count--
 
                                         if (this.count < 0) {
@@ -1091,16 +1117,17 @@ const simulation = {
                             })
                         }
                         if (tech.isZeno) {
-                            if (tech.isEnergyHealth) {
-                                m.energy *= 0.95
-                            } else {
-                                m.health *= 0.95 //remove 5%
-                                m.displayHealth();
-                            }
+                            m.takeDamage(0.05 * (tech.isEnergyHealth ? m.energy : m.health), false)
+                            // if (tech.isEnergyHealth) {
+                            //     m.energy *= 0.95
+                            // } else {
+                            //     m.health *= 0.95 //remove 5%
+                            //     m.displayHealth();
+                            // }
                             simulation.drawList.push({ //add dmg to draw queue
                                 x: m.pos.x,
                                 y: m.pos.y,
-                                radius: 5,
+                                radius: 10,
                                 color: "rgb(255, 0, 195)",
                                 time: 4
                             });
@@ -1111,7 +1138,7 @@ const simulation = {
                         let i = body.length;
                         while (i--) {
                             if (body[i].position.y > simulation.fallHeight) {
-                                if (body[i].isInvulnerable) {
+                                if (body[i].isInvulnerable || body[i].isImmutable) {
                                     Matter.Body.setVelocity(body[i], { x: 0, y: 0 });
                                     if (level.fallMode === "position") {
                                         const posXClamped = Math.min(Math.max(level.fallModeBounds.left, body[i].position.x), level.fallModeBounds.right)
@@ -1172,6 +1199,10 @@ const simulation = {
     },
     clearNow: false,
     clearMap() {
+        // level.mirrorDoors.reset();
+        level.exit.reflection = null;
+        level.exit.isInverted = false;
+        level.exit.bottomOffset = 20;
         level.isVerticalFLipLevel = false
         level.isProcedural = false;
         level.fallMode = "";
@@ -1394,6 +1425,7 @@ const simulation = {
         map = [];
         removeAll(body);
         body = [];
+        lastTouchedBlock = null;
         removeAll(mob);
         mob = [];
         removeAll(powerUp);
@@ -1412,7 +1444,10 @@ const simulation = {
             body[len] = Matter.Bodies.fromVertices(0, 0, holdTarget.vertices, {
                 friction: holdTarget.friction,
                 frictionAir: holdTarget.frictionAir,
-                frictionStatic: holdTarget.frictionStatic
+                frictionStatic: holdTarget.frictionStatic,
+                isKey: holdTarget.isKey,
+                isImmutable: holdTarget.isImmutable,
+                draw: holdTarget.draw
             });
             Matter.Body.setPosition(body[len], m.pos);
             m.isHolding = true
@@ -1457,7 +1492,6 @@ const simulation = {
     // },
     testingOutput() {
         ctx.fillStyle = "#000";
-        ctx.textAlign = "center";
         ctx.fillText(`(${simulation.mouseInGame.x.toFixed(1)}, ${simulation.mouseInGame.y.toFixed(1)})`, simulation.mouse.x, simulation.mouse.y - 20);
     },
     sight: { //credit to Cornbread2100 for adding this algorithm to n-gon
@@ -1488,21 +1522,17 @@ const simulation = {
 
         // (Only adds an AABB guard + declares `results` with let.)
         getIntersections(v1, v1End, domain) {
-            function segmentsBboxOverlap(p1, p2, q1, q2) {
-                // Bounding box of segment p1-p2
-                const pMinX = p1.x < p2.x ? p1.x : p2.x;
-                const pMaxX = p1.x > p2.x ? p1.x : p2.x;
-                const pMinY = p1.y < p2.y ? p1.y : p2.y;
-                const pMaxY = p1.y > p2.y ? p1.y : p2.y;
+            const rayMinX = v1.x < v1End.x ? v1.x : v1End.x;
+            const rayMaxX = v1.x > v1End.x ? v1.x : v1End.x;
+            const rayMinY = v1.y < v1End.y ? v1.y : v1End.y;
+            const rayMaxY = v1.y > v1End.y ? v1.y : v1End.y;
 
-                // Bounding box of segment q1-q2
-                const qMinX = q1.x < q2.x ? q1.x : q2.x;
-                const qMaxX = q1.x > q2.x ? q1.x : q2.x;
-                const qMinY = q1.y < q2.y ? q1.y : q2.y;
-                const qMaxY = q1.y > q2.y ? q1.y : q2.y;
-
-                // Boxes must overlap on both axes to possibly intersect
-                return !(pMaxX < qMinX || qMaxX < pMinX || pMaxY < qMinY || qMaxY < pMinY);
+            function edgeBboxOverlapsRay(q1, q2) {
+                const edgeMinX = q1.x < q2.x ? q1.x : q2.x;
+                const edgeMaxX = q1.x > q2.x ? q1.x : q2.x;
+                const edgeMinY = q1.y < q2.y ? q1.y : q2.y;
+                const edgeMaxY = q1.y > q2.y ? q1.y : q2.y;
+                return !(rayMaxX < edgeMinX || edgeMaxX < rayMinX || rayMaxY < edgeMinY || edgeMaxY < rayMinY);
             }
 
             const intersections = [];
@@ -1514,9 +1544,9 @@ const simulation = {
                     const b = obj.vertices[i + 1];
 
                     // Cheap reject: skip if segment bbox doesn't overlap ray bbox
-                    if (!segmentsBboxOverlap(v1, v1End, a, b)) continue;
+                    if (!edgeBboxOverlapsRay(a, b)) continue;
 
-                    let results = simulation.checkLineIntersection(v1, v1End, a, b);
+                    const results = simulation.checkLineIntersection(v1, v1End, a, b);
                     if (results.onLine1 && results.onLine2) intersections.push({ x: results.x, y: results.y });
                 }
 
@@ -1524,8 +1554,8 @@ const simulation = {
                 const a = obj.vertices[obj.vertices.length - 1];
                 const b = obj.vertices[0];
 
-                if (segmentsBboxOverlap(v1, v1End, a, b)) {
-                    let results = simulation.checkLineIntersection(v1, v1End, a, b);
+                if (edgeBboxOverlapsRay(a, b)) {
+                    const results = simulation.checkLineIntersection(v1, v1End, a, b);
                     if (results.onLine1 && results.onLine2) intersections.push({ x: results.x, y: results.y });
                 }
             }
@@ -1533,12 +1563,156 @@ const simulation = {
             return intersections;
         },
 
+        appendMapIntersections(v1, v1End, excludedBodyIndex, target) {
+            const rayMinX = v1.x < v1End.x ? v1.x : v1End.x;
+            const rayMaxX = v1.x > v1End.x ? v1.x : v1End.x;
+            const rayMinY = v1.y < v1End.y ? v1.y : v1End.y;
+            const rayMaxY = v1.y > v1End.y ? v1.y : v1End.y;
+            const rayDx = v1End.x - v1.x;
+            const rayDy = v1End.y - v1.y;
+
+            for (let bodyIndex = 0; bodyIndex < map.length; bodyIndex++) {
+                if (bodyIndex === excludedBodyIndex) continue;
+                const obj = map[bodyIndex];
+                const bounds = obj.bounds;
+                if (rayMaxX < bounds.min.x || bounds.max.x < rayMinX ||
+                    rayMaxY < bounds.min.y || bounds.max.y < rayMinY) continue;
+
+                const vertices = obj.vertices;
+                for (let edgeIndex = 0; edgeIndex < vertices.length; edgeIndex++) {
+                    const edgeStart = vertices[edgeIndex];
+                    const edgeEnd = vertices[(edgeIndex + 1) % vertices.length];
+                    const edgeMinX = edgeStart.x < edgeEnd.x ? edgeStart.x : edgeEnd.x;
+                    const edgeMaxX = edgeStart.x > edgeEnd.x ? edgeStart.x : edgeEnd.x;
+                    const edgeMinY = edgeStart.y < edgeEnd.y ? edgeStart.y : edgeEnd.y;
+                    const edgeMaxY = edgeStart.y > edgeEnd.y ? edgeStart.y : edgeEnd.y;
+                    if (rayMaxX < edgeMinX || edgeMaxX < rayMinX ||
+                        rayMaxY < edgeMinY || edgeMaxY < rayMinY) continue;
+
+                    const edgeDx = edgeEnd.x - edgeStart.x;
+                    const edgeDy = edgeEnd.y - edgeStart.y;
+                    const denominator = edgeDy * rayDx - edgeDx * rayDy;
+                    if (denominator === 0) continue;
+                    const offsetY = v1.y - edgeStart.y;
+                    const offsetX = v1.x - edgeStart.x;
+                    const rayFraction = (edgeDx * offsetY - edgeDy * offsetX) / denominator;
+                    const edgeFraction = (rayDx * offsetY - rayDy * offsetX) / denominator;
+                    if (rayFraction > 0 && rayFraction < 1 && edgeFraction > 0 && edgeFraction < 1) {
+                        target.push({
+                            x: v1.x + rayFraction * rayDx,
+                            y: v1.y + rayFraction * rayDy
+                        });
+                    }
+                }
+            }
+        },
+
+        circleLineCollisionsLegacy(a, b, c, radius) {
+            const angleOffset = Math.atan2(b.y - a.y, b.x - a.x);
+            const sideB = Math.sqrt((a.x - c.x) ** 2 + (a.y - c.y) ** 2);
+            const sideC = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+            const sideA = Math.sqrt((c.x - b.x) ** 2 + (c.y - b.y) ** 2);
+            const angleA = Math.acos((sideB ** 2 + sideC ** 2 - sideA ** 2) / (2 * sideB * sideC)) *
+                (a.x - c.x) / -Math.abs(a.x - c.x);
+            const sideAD = Math.cos(angleA) * sideB;
+            const d = {
+                x: Math.cos(angleOffset) * sideAD + a.x,
+                y: Math.sin(angleOffset) * sideAD + a.y
+            };
+            const distance = Math.sqrt((d.x - c.x) ** 2 + (d.y - c.y) ** 2);
+            if (distance == radius) return [d];
+            if (distance >= radius) return [];
+
+            const collisionAngle = Math.atan2(d.y - c.y, d.x - c.x);
+            const innerAngle = Math.acos(distance / radius);
+            const intersection1 = {
+                x: Math.cos(collisionAngle + innerAngle) * radius + c.x,
+                y: Math.sin(collisionAngle + innerAngle) * radius + c.y
+            };
+            const intersection2 = {
+                x: Math.cos(collisionAngle - innerAngle) * radius + c.x,
+                y: Math.sin(collisionAngle - innerAngle) * radius + c.y
+            };
+            const distance1A = Math.sqrt((intersection1.x - a.x) ** 2 + (intersection1.y - a.y) ** 2);
+            const distance1B = Math.sqrt((intersection1.x - b.x) ** 2 + (intersection1.y - b.y) ** 2);
+            const distance2A = Math.sqrt((intersection2.x - a.x) ** 2 + (intersection2.y - a.y) ** 2);
+            const distance2B = Math.sqrt((intersection2.x - b.x) ** 2 + (intersection2.y - b.y) ** 2);
+            const result = [];
+            if (Math.abs(sideC - (distance1A + distance1B)) < 0.01) {
+                result.push(intersection1);
+            } else if (distance1A < distance1B) {
+                if (sideB <= radius) result.push(a);
+            } else if (sideA <= radius) {
+                result.push(b);
+            }
+            if (Math.abs(sideC - (distance2A + distance2B)) < 0.01) {
+                result.push(intersection2);
+            } else if (distance2A <= distance2B) {
+                if (sideB <= radius) result.push(a);
+            } else if (sideA <= radius) {
+                result.push(b);
+            }
+            return result;
+        },
+
+        circleLineCollisions(a, b, c, radius) {
+            const edgeDx = b.x - a.x;
+            const edgeDy = b.y - a.y;
+            const edgeLengthSquared = edgeDx * edgeDx + edgeDy * edgeDy;
+            const centerDx = c.x - a.x;
+            const centerDy = c.y - a.y;
+            const side = edgeDx * centerDy - edgeDy * centerDx;
+            if (edgeLengthSquared === 0 || a.x === c.x || side === 0) {
+                return simulation.sight.circleLineCollisionsLegacy(a, b, c, radius);
+            }
+
+            const closestFraction = (centerDx * edgeDx + centerDy * edgeDy) / edgeLengthSquared;
+            const closestX = a.x + closestFraction * edgeDx;
+            const closestY = a.y + closestFraction * edgeDy;
+            const closestDx = closestX - c.x;
+            const closestDy = closestY - c.y;
+            const closestDistanceSquared = closestDx * closestDx + closestDy * closestDy;
+            const radiusSquared = radius * radius;
+            if (closestDistanceSquared === radiusSquared) return [{ x: closestX, y: closestY }];
+            if (closestDistanceSquared >= radiusSquared) return [];
+
+            const edgeLength = Math.sqrt(edgeLengthSquared);
+            const rootOffset = Math.sqrt(radiusSquared - closestDistanceSquared) / edgeLength;
+            const lowerFraction = closestFraction - rootOffset;
+            const upperFraction = closestFraction + rootOffset;
+            const firstFraction = side > 0 ? upperFraction : lowerFraction;
+            const secondFraction = side > 0 ? lowerFraction : upperFraction;
+            const fractionTolerance = 0.005 / edgeLength;
+            const aInside = centerDx * centerDx + centerDy * centerDy <= radiusSquared;
+            const bCenterDx = b.x - c.x;
+            const bCenterDy = b.y - c.y;
+            const bInside = bCenterDx * bCenterDx + bCenterDy * bCenterDy <= radiusSquared;
+            const result = [];
+
+            function appendCollision(fraction) {
+                if (fraction > -fractionTolerance && fraction < 1 + fractionTolerance) {
+                    result.push({
+                        x: a.x + fraction * edgeDx,
+                        y: a.y + fraction * edgeDy
+                    });
+                } else if (fraction < 0.5) {
+                    if (aInside) result.push(a);
+                } else if (bInside) {
+                    result.push(b);
+                }
+            }
+
+            appendCollision(firstFraction);
+            appendCollision(secondFraction);
+            return result;
+        },
+
         circleLoS(pos, radius) {
             function allCircleLineCollisions(c, radius, domain) {
                 var lines = [];
                 for (const obj of domain) {
-                    for (var i = 0; i < obj.vertices.length - 1; i++) lines.push(circleLineCollisions(obj.vertices[i], obj.vertices[i + 1], c, radius));
-                    lines.push(circleLineCollisions(obj.vertices[obj.vertices.length - 1], obj.vertices[0], c, radius));
+                    for (var i = 0; i < obj.vertices.length - 1; i++) lines.push(simulation.sight.circleLineCollisions(obj.vertices[i], obj.vertices[i + 1], c, radius));
+                    lines.push(simulation.sight.circleLineCollisions(obj.vertices[obj.vertices.length - 1], obj.vertices[0], c, radius));
                 }
                 const collisionLines = [];
                 for (const line of lines) {
@@ -1562,73 +1736,6 @@ const simulation = {
                 return collisionLines;
             }
 
-            function circleLineCollisions(a, b, c, radius) {
-                // calculate distances
-                const angleOffset = Math.atan2(b.y - a.y, b.x - a.x);
-                const sideB = Math.sqrt((a.x - c.x) ** 2 + (a.y - c.y) ** 2);
-                const sideC = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-                const sideA = Math.sqrt((c.x - b.x) ** 2 + (c.y - b.y) ** 2);
-
-                // calculate the closest point on line AB to point C
-                const angleA = Math.acos((sideB ** 2 + sideC ** 2 - sideA ** 2) / (2 * sideB * sideC)) * (a.x - c.x) / -Math.abs(a.x - c.x)
-                const sideAD = Math.cos(angleA) * sideB;
-                const d = { // closest point
-                    x: Math.cos(angleOffset) * sideAD + a.x,
-                    y: Math.sin(angleOffset) * sideAD + a.y
-                }
-                const distance = Math.sqrt((d.x - c.x) ** 2 + (d.y - c.y) ** 2);
-                if (distance == radius) {
-                    // tangent
-                    return [d];
-                } else if (distance < radius) {
-                    // secant
-                    const angleOffset = Math.atan2(d.y - c.y, d.x - c.x);
-                    const innerAngle = Math.acos(distance / radius);
-                    const intersection1 = {
-                        x: Math.cos(angleOffset + innerAngle) * radius + c.x,
-                        y: Math.sin(angleOffset + innerAngle) * radius + c.y
-                    }
-
-                    const intersection2 = {
-                        x: Math.cos(angleOffset - innerAngle) * radius + c.x,
-                        y: Math.sin(angleOffset - innerAngle) * radius + c.y
-                    }
-
-                    const distance1 = {
-                        a: Math.sqrt((intersection1.x - a.x) ** 2 + (intersection1.y - a.y) ** 2),
-                        b: Math.sqrt((intersection1.x - b.x) ** 2 + (intersection1.y - b.y) ** 2)
-                    }
-                    const distance2 = {
-                        a: Math.sqrt((intersection2.x - a.x) ** 2 + (intersection2.y - a.y) ** 2),
-                        b: Math.sqrt((intersection2.x - b.x) ** 2 + (intersection2.y - b.y) ** 2)
-                    }
-                    const result = [];
-                    if (Math.abs(sideC - (distance1.a + distance1.b)) < 0.01) {
-                        result.push(intersection1);
-                    } else {
-                        if (distance1.a < distance1.b) {
-                            if (sideB <= radius) result.push(a);
-                        } else {
-                            if (sideA <= radius) result.push(b)
-                        }
-                    }
-                    if (Math.abs(sideC - (distance2.a + distance2.b)) < 0.01) {
-                        result.push(intersection2);
-                    } else {
-                        if (distance2.a <= distance2.b) {
-                            if (sideB <= radius) result.push(a);
-                        } else {
-                            if (sideA <= radius) result.push(b)
-                        }
-                    }
-
-                    return result;
-                } else {
-                    // no intersection
-                    return [];
-                }
-            }
-
             var vertices = [];
             for (const obj of simulation.sight.intersectMap) {
                 for (var i = 0; i < obj.vertices.length; i++) {
@@ -1638,7 +1745,7 @@ const simulation = {
                     // const queryPoint = { x: Math.cos(angleToVertex) * (distanceToVertex - 1) + pos.x, y: Math.sin(angleToVertex) * (distanceToVertex - 1) + pos.y }
                     const queryPoint = { x: Math.cos(angleToVertex + Math.PI) + vertex.x, y: Math.sin(angleToVertex + Math.PI) + vertex.y }
 
-                    if (Matter.Query.ray(map, pos, queryPoint).length == 0) {
+                    if (!Matter.Query.segmentAny(map, pos, queryPoint)) {
                         var distance = Math.sqrt((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2);
                         var endPoint = { x: vertex.x, y: vertex.y }
 
@@ -1676,7 +1783,7 @@ const simulation = {
                     const distance = Math.sqrt((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2)
                     const angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                     const queryPoint = { x: Math.cos(angle + Math.PI) + vertex.x, y: Math.sin(angle + Math.PI) + vertex.y }
-                    if (Math.abs(distance - radius) < 1 && Matter.Query.ray(map, pos, queryPoint).length == 0) circleCollisions.push(vertex)
+                    if (Math.abs(distance - radius) < 1 && !Matter.Query.segmentAny(map, pos, queryPoint)) circleCollisions.push(vertex)
                 }
             }
             for (var i = 0; i < circleCollisions.length; i++) {
@@ -1716,6 +1823,18 @@ const simulation = {
     },
     draw: {
 
+        isMapPathRebuildPending: false,
+        requestMapPathRebuild() {
+            simulation.draw.isMapPathRebuildPending = true;
+        },
+        flushMapPathRebuild() {
+            if (!simulation.draw.isMapPathRebuildPending) return false;
+            simulation.draw.isMapPathRebuildPending = false;
+            simulation.draw.setPaths();
+            simulation.draw.lineOfSightPrecalculation();
+            return true;
+        },
+
         mapPath: null, //holds the path for the map to speed up drawing
         setPaths() {
             //runs at each new level to store the path for the map since the map doesn't change
@@ -1731,18 +1850,19 @@ const simulation = {
         },
         lineOfSightPrecalculation() {
             simulation.sight.intersectMap = [];
-            for (var i = 0; i < map.length; i++) {
+            for (let i = 0; i < map.length; i++) {
                 const obj = map[i];
                 const newVertices = [];
-                const restOfMap = [...map].slice(0, i).concat([...map].slice(i + 1))
-                for (var j = 0; j < obj.vertices.length - 1; j++) {
-                    var intersections = simulation.sight.getIntersections(obj.vertices[j], obj.vertices[j + 1], restOfMap);
-                    newVertices.push(obj.vertices[j]);
-                    for (const vertex of intersections) newVertices.push({ x: vertex.x, y: vertex.y });
+                for (let j = 0; j < obj.vertices.length; j++) {
+                    const vertex = obj.vertices[j];
+                    newVertices.push(vertex);
+                    simulation.sight.appendMapIntersections(
+                        vertex,
+                        obj.vertices[(j + 1) % obj.vertices.length],
+                        i,
+                        newVertices
+                    );
                 }
-                intersections = simulation.sight.getIntersections(obj.vertices[obj.vertices.length - 1], obj.vertices[0], restOfMap);
-                newVertices.push(obj.vertices[obj.vertices.length - 1]);
-                for (const vertex of intersections) newVertices.push({ x: vertex.x, y: vertex.y });
                 //draw the vertices as black circles for debugging
                 // for (const vertex of newVertices) {
                 //     ctx.beginPath();
@@ -1840,9 +1960,6 @@ const simulation = {
             ctx.stroke();
         },
         wireFrame() {
-            // ctx.textAlign = "center";
-            // ctx.textBaseline = "middle";
-            // ctx.fillStyle = "#999";
             const bodies = Composite.allBodies(engine.world);
             ctx.beginPath();
             for (let i = 0; i < bodies.length; ++i) {
@@ -2422,11 +2539,7 @@ const simulation = {
                 const dx = Math.max(25, round(simulation.mouseInGame.x) - x)
                 const dy = Math.max(25, round(simulation.mouseInGame.y) - y)
                 if (e.button === 1) {
-                    if (level.isProcedural) {
-                        simulation.outputMapString(`spawn.randomMob(x+${x}, ${y}, 0);\n`);
-                    } else {
-                        simulation.outputMapString(`spawn.randomMob(${x}, ${y}, 0);\n`);
-                    }
+                    simulation.outputMapString(`[${x}, ${y}],\n`);
                 } else if (e.button === 4) {
                     simulation.outputMapString(`${Math.floor(simulation.constructMouseDownPosition.x)}, ${Math.floor(simulation.constructMouseDownPosition.y)} `);
                 } else if (simulation.mouseInGame.x > simulation.constructMouseDownPosition.x && simulation.mouseInGame.y > simulation.constructMouseDownPosition.y) { //make sure that the width and height are positive
@@ -2522,40 +2635,4 @@ const simulation = {
         });
         document.getElementById("construct").innerHTML = outHTML
     },
-    // copyToClipBoard(value) {
-    //     // Create a fake textarea
-    //     const textAreaEle = document.createElement('textarea');
-
-    //     // Reset styles
-    //     textAreaEle.style.border = '0';
-    //     textAreaEle.style.padding = '0';
-    //     textAreaEle.style.margin = '0';
-
-    //     // Set the absolute position
-    //     // User won't see the element
-    //     textAreaEle.style.position = 'absolute';
-    //     textAreaEle.style.left = '-9999px';
-    //     textAreaEle.style.top = `0px`;
-
-    //     // Set the value
-    //     textAreaEle.value = value
-
-    //     // Append the textarea to body
-    //     document.body.appendChild(textAreaEle);
-
-    //     // Focus and select the text
-    //     textAreaEle.focus();
-    //     textAreaEle.select();
-
-    //     // Execute the "copy" command
-    //     try {
-    //         document.execCommand('copy');
-    //     } catch (err) {
-    //         // Unable to copy
-    //         console.log(err)
-    //     } finally {
-    //         // Remove the textarea
-    //         document.body.removeChild(textAreaEle);
-    //     }
-    // },
 };

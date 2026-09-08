@@ -230,6 +230,37 @@ const spawn = {
             spawn[pick](x, y);
         }
     },
+    randomMobPositions: [],
+    randomMobFromArray() {
+        seededShuffle(spawn.randomMobPositions)
+        const maxMobs = (simulation.difficultyMode === 1) ? 2 : Math.ceil(5 * Math.log(level.levelsCleared + 1))
+        const mobsInLevel = mob.filter(who => who.alive && who.isDropPowerUp && !who.isBoss && !who.shield && !who.isMobBullet && who.collisionFilter.category !== cat.mobBullet).length
+        const mobsToSpawn = Math.min(spawn.randomMobPositions.length, Math.max(0, maxMobs - mobsInLevel))
+        for (let i = 0; i < mobsToSpawn; i++) {
+            const position = spawn.randomMobPositions[i]
+            if (position.isSmall) {
+                const num = Math.max(Math.min(Math.round(Math.random() * simulation.difficulty * 0.2), 4), 0)
+                const size = 16 + Math.ceil(Math.random() * 15)
+                for (let j = 0; j < num; j++) {
+                    const pick = spawn.pickList[Math.floor(Math.random() * spawn.pickList.length)]
+                    spawn[pick](position.x + Math.round((Math.random() - 0.5) * 20) + j * size * 2.5, position.y + Math.round((Math.random() - 0.5) * 20), size)
+                }
+                if (tech.isDuplicateMobs && Math.random() < tech.duplicationChance()) {
+                    for (let j = 0; j < num; j++) {
+                        const pick = spawn.pickList[Math.floor(Math.random() * spawn.pickList.length)]
+                        spawn[pick](position.x + Math.round((Math.random() - 0.5) * 20) + j * size * 2.5, position.y + Math.round((Math.random() - 0.5) * 20), size)
+                    }
+                }
+            } else {
+                const pick = spawn.pickList[Math.floor(Math.random() * spawn.pickList.length)]
+                spawn[pick](position.x, position.y)
+                if (tech.isDuplicateMobs && Math.random() < tech.duplicationChance()) {
+                    const pick = spawn.pickList[Math.floor(Math.random() * spawn.pickList.length)]
+                    spawn[pick](position.x, position.y)
+                }
+            }
+        }
+    },
     randomSmallMob(x, y,
         num = Math.max(Math.min(Math.round(Math.random() * simulation.difficulty * 0.2), 4), 0),
         size = 16 + Math.ceil(Math.random() * 15),
@@ -550,7 +581,6 @@ const spawn = {
                     for (let i = 0; i < mob.length; i++) {
                         if (mob[i].isFinalBossMob) {
                             foundMobs = true
-                            // mob[i].damage(0.01);
                             break
                         }
                     }
@@ -1310,7 +1340,7 @@ const spawn = {
                     } else {
                         level.exit.x = 5500;
                     }
-                    level.exit.y = -330;
+                    level.exit.y = -320;
                     Matter.Composite.remove(engine.world, map[map.length - 1]);
                     map.splice(map.length - 1, 1);
                     simulation.draw.setPaths(); //redraw map draw path
@@ -1350,7 +1380,6 @@ const spawn = {
                                 document.getElementById("health").style.display = "none"
                                 document.getElementById("health-bg").style.display = "none"
                                 document.getElementById("defense-bar").style.display = "none"
-                                document.getElementById("damage-bar").style.display = "none"
                                 document.getElementById("text-log").style.display = "none"
                                 document.getElementById("fade-out").style.opacity = 1; //slowly fades out
                                 // build.shareURL(false)
@@ -1450,8 +1479,8 @@ const spawn = {
                         !mob[i].isZombie &&
                         !mob[i].isUnblockable &&
                         !mob[i].isMobBullet &&
-                        Matter.Query.ray(map, this.position, mob[i].position).length === 0 &&
-                        Matter.Query.ray(body, this.position, mob[i].position).length === 0
+                        !Matter.Query.rayAny(map, this.position, mob[i].position) &&
+                        !Matter.Query.rayAny(body, this.position, mob[i].position)
                         // !mob[i].isBadTarget &&
                         // !mob[i].isInvulnerable &&
                         // (Vector.magnitudeSquared(Vector.sub(this.position, mob[this.mobSearchIndex].position)) < this.seeAtDistance2)
@@ -1466,7 +1495,7 @@ const spawn = {
             } else if (
                 !(simulation.cycle % this.memory) &&
                 this.target &&
-                (!this.target.alive || Matter.Query.ray(map, this.position, this.target.position).length !== 0)
+                (!this.target.alive || Matter.Query.rayAny(map, this.position, this.target.position))
             ) {
                 this.target = null //chance to forget target
             }
@@ -1725,7 +1754,7 @@ const spawn = {
             if (!(simulation.cycle % 30)) {
                 //find blocks to turn into mobs
                 for (let i = 0; i < body.length; i++) {
-                    if (Vector.magnitude(Vector.sub(this.position, body[i].position)) < 700 && !body[i].isNotHoldable && !body[i].isInvulnerable) { // check distance for each block
+                    if (Vector.magnitude(Vector.sub(this.position, body[i].position)) < 700 && !body[i].isNotHoldable && !body[i].isInvulnerable && !body[i].isImmutable) { // check distance for each block
                         Matter.Composite.remove(engine.world, body[i]);
                         this.target = null //player;
                         spawn.blockMob(body[i].position.x, body[i].position.y, body[i], 0);
@@ -1743,7 +1772,7 @@ const spawn = {
                         let closestBlock = null;
                         for (const block of body) {
                             const dist = Vector.magnitudeSquared(Vector.sub(this.position, block.position))
-                            if (dist < min && Matter.Query.ray(map, this.position, block.position).length === 0) {
+                            if (!block.isImmutable && dist < min && !Matter.Query.rayAny(map, this.position, block.position)) {
                                 min = dist;
                                 closestBlock = block;
                             }
@@ -1912,7 +1941,7 @@ const spawn = {
                 }
                 //find blocks to turn into mobs
                 for (let i = 0; i < body.length; i++) {
-                    if (Vector.magnitude(Vector.sub(this.position, body[i].position)) < 700 && !body[i].isNotHoldable && !body[i].isInvulnerable) { // check distance for each block
+                    if (Vector.magnitude(Vector.sub(this.position, body[i].position)) < 700 && !body[i].isNotHoldable && !body[i].isInvulnerable && !body[i].isImmutable) { // check distance for each block
                         Matter.Composite.remove(engine.world, body[i]);
                         this.target = null //player;
                         spawn.blockMob(body[i].position.x, body[i].position.y, body[i], 0, true);
@@ -1930,7 +1959,7 @@ const spawn = {
                         let closestBlock = null;
                         for (const block of body) {
                             const dist = Vector.magnitudeSquared(Vector.sub(this.position, block.position))
-                            if (dist < min && Matter.Query.ray(map, this.position, block.position).length === 0) {
+                            if (!block.isImmutable && dist < min && !Matter.Query.rayAny(map, this.position, block.position)) {
                                 min = dist;
                                 closestBlock = block;
                             }
@@ -3317,7 +3346,7 @@ const spawn = {
             if (this.seePlayer.recall) this.healthBar4()
 
             if (this.distanceToPlayer() < 500) {
-                if (!this.isSlashing && m.immuneCycle < m.cycle && Matter.Query.ray(map, this.position, m.pos).length === 0) this.sword = this.swordWaiting
+                if (!this.isSlashing && m.immuneCycle < m.cycle && !Matter.Query.rayAny(map, this.position, m.pos)) this.sword = this.swordWaiting
             }
             this.attraction();
             this.sword() //does various things depending on what stage of the sword swing
@@ -3802,7 +3831,7 @@ const spawn = {
             if (this.seePlayer.recall) {
                 this.healthBar2()
                 if (this.distanceToPlayer() < 500) {
-                    if (!this.isSlashing && m.immuneCycle < m.cycle && Matter.Query.ray(map, this.position, m.pos).length === 0) this.sword = this.swordWaiting
+                    if (!this.isSlashing && m.immuneCycle < m.cycle && !Matter.Query.rayAny(map, this.position, m.pos)) this.sword = this.swordWaiting
                 }
             }
             this.attraction();
@@ -4956,7 +4985,7 @@ const spawn = {
             if (Vector.magnitude(Vector.sub(this.position, player.position)) < eventHorizon) {
                 if (m.immuneCycle < m.cycle) {
                     if (m.energy > 0) m.energy -= 0.005
-                    if (m.energy < 0.1) m.takeDamage(0.0001 * this.damageScale());
+                    if (m.energy < 0.1 && !(m.cycle % 5)) m.takeDamage(0.0005 * this.damageScale());
                 }
                 const angle = Math.atan2(player.position.y - this.position.y, player.position.x - this.position.x);
                 player.force.x -= 0.00125 * player.mass * Math.cos(angle) * (m.onGround ? 1.8 : 1);
@@ -5026,7 +5055,7 @@ const spawn = {
             if (Vector.magnitude(Vector.sub(this.position, player.position)) < eventHorizon) {
                 if (m.immuneCycle < m.cycle) {
                     if (m.energy > 0) m.energy -= 0.005
-                    if (m.energy < 0.1) m.takeDamage(0.0001 * this.damageScale());
+                    if (m.energy < 0.1 && !(m.cycle % 5)) m.takeDamage(0.0005 * this.damageScale());
                 }
                 const angle = Math.atan2(player.position.y - this.position.y, player.position.x - this.position.x);
                 player.force.x -= 0.00125 * player.mass * Math.cos(angle) * (m.onGround ? 1.8 : 1);
@@ -5058,7 +5087,7 @@ const spawn = {
         me.collisionFilter.mask = cat.player | cat.bullet //| cat.body
         // me.frictionAir = 0.005;
         me.memory = 1600;
-        Matter.Body.setDensity(me, 0.06); //extra dense //normal is 0.001 //makes effective life much larger
+        Matter.Body.setDensity(me, 0.055); //extra dense //normal is 0.001 //makes effective life much larger
         me.onDeath = function () {
             //applying forces to player doesn't seem to work inside this method, not sure why
             powerUps.spawnBossPowerUp(this.position.x, this.position.y)
@@ -5148,7 +5177,7 @@ const spawn = {
                 if (Vector.magnitude(Vector.sub(this.position, player.position)) < eventHorizon) {
                     if (m.immuneCycle < m.cycle) {
                         if (m.energy > 0) m.energy -= 0.008
-                        if (m.energy < 0.1) m.takeDamage(0.00015 * this.damageScale());
+                        if (m.energy < 0.1 && !(m.cycle % 5)) m.takeDamage(0.0008 * this.damageScale());
                     }
                     const angle = Math.atan2(player.position.y - this.position.y, player.position.x - this.position.x);
                     player.force.x -= 0.0013 * Math.cos(angle) * player.mass * (m.onGround ? 1.7 : 1);
@@ -6298,8 +6327,8 @@ const spawn = {
                 this.seePlayer.recall &&
                 this.cd < simulation.cycle &&
                 this.distanceToPlayer2() < seeDistance2 &&
-                Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
-                Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
+                !Matter.Query.rayAny(body, this.position, this.playerPosRandomY())
             ) {
                 //find vertex closest to the player
                 let dist = Infinity
@@ -6495,7 +6524,7 @@ const spawn = {
             if (!(simulation.cycle % this.seePlayerFreq)) { // this.seePlayerCheck();  from mobs
                 if (
                     this.distanceToPlayer2() < this.seeAtDistance2 &&
-                    Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
+                    !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
                     !m.isCloak
                 ) {
                     this.foundPlayer();
@@ -6508,7 +6537,7 @@ const spawn = {
             this.checkStatus();
             if (this.distanceToPlayer() < 500) {
                 this.accelMag = 0.0015 //faster when close
-                if (!this.isSlashing && m.immuneCycle < m.cycle && Matter.Query.ray(map, this.position, m.pos).length === 0) this.sword = this.swordWaiting
+                if (!this.isSlashing && m.immuneCycle < m.cycle && !Matter.Query.rayAny(map, this.position, m.pos)) this.sword = this.swordWaiting
             } else {
                 this.accelMag = 0.0004
             }
@@ -6634,10 +6663,33 @@ const spawn = {
         me.startingDamageReduction = me.damageReduction
         me.isInvulnerable = false
         me.invulnerabilityCountDown = 0
+        me.drawMantisConstraints = function () {
+            ctx.beginPath();
+            ctx.moveTo(this.cons.pointA.x, this.cons.pointA.y)
+            ctx.lineTo(this.position.x, this.position.y)
+            ctx.moveTo(this.cons2.pointA.x, this.cons2.pointA.y)
+            ctx.lineTo(this.position.x, this.position.y)
+            for (let i = 0; i < this.babyList.length; i++) {
+                if (this.babyList[i].alive) {
+                    ctx.moveTo(this.position.x, this.position.y)
+                    ctx.lineTo(this.babyList[i].position.x, this.babyList[i].position.y)
+
+                    const next = this.babyList[(i + 1) % this.babyList.length]
+                    if (next.alive) {
+                        ctx.moveTo(this.babyList[i].position.x, this.babyList[i].position.y)
+                        ctx.lineTo(next.position.x, next.position.y)
+                    }
+                }
+            }
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "#222";
+            ctx.stroke();
+        }
         me.do = function () {
             if (this.seePlayer.recall) this.healthBar3()
             this.checkStatus();
             this.gravity();
+            this.drawMantisConstraints()
             //draw the two dots on the end of the springs
             ctx.beginPath();
             ctx.arc(this.cons.pointA.x, this.cons.pointA.y, 6, 0, 2 * Math.PI);
@@ -6691,7 +6743,7 @@ const spawn = {
             }
             // set new values of the ends of the spring constraints
             const stepRange = 700
-            if (this.seePlayer.recall && Matter.Query.ray(map, this.position, this.seePlayer.position).length === 0) {
+            if (this.seePlayer.recall && !Matter.Query.rayAny(map, this.position, this.seePlayer.position)) {
                 if (!(simulation.cycle % (this.seePlayerFreq * 2))) {
                     const unit = Vector.normalise(Vector.sub(this.seePlayer.position, this.position))
                     const goal = Vector.add(this.position, Vector.mult(unit, stepRange))
@@ -6986,9 +7038,9 @@ const spawn = {
                 ctx.moveTo(this.position.x, this.position.y);
                 if (targetDist < r + 16) {
                     targetDist = r + 10;
-                    if (m.immuneCycle < m.cycle) {
-                        m.takeDamage(0.0003 * this.damageScale());
-                        if (m.energy > 0.1) m.energy -= 0.003
+                    if (!(m.cycle % 20) && m.immuneCycle < m.cycle) {
+                        m.takeDamage(0.006 * this.damageScale());
+                        if (m.energy > 0.1) m.energy -= 0.06
                     }
                     ctx.beginPath();
                     ctx.moveTo(this.position.x, this.position.y);
@@ -8029,7 +8081,7 @@ const spawn = {
             //check for player collisions in between each segment
             if (m.immuneCycle < m.cycle) {
                 for (let i = 0; i < this.history.length - 1; i++) {
-                    if (Matter.Query.ray([player], this.history[i], this.history[i + 1], 10).length > 0) {
+                    if (Matter.Query.rayAny([player], this.history[i], this.history[i + 1], 10)) {
                         m.immuneCycle = m.cycle + m.collisionImmuneCycles + 60
                         const dmg = 0.15 * this.damageScale()
                         m.takeDamage(dmg);
@@ -8071,7 +8123,7 @@ const spawn = {
 
 
                     for (let i = 0; i < body.length; i++) {
-                        if (!body[i].isInvulnerable && !body[i].isNotHoldable) {
+                        if (!body[i].isInvulnerable && !body[i].isNotHoldable && !body[i].isImmutable) {
                             const diff = Vector.sub(this.position, body[i].position);
                             const distance = Vector.magnitude(diff);
                             // if within range, apply an outward force
@@ -8113,7 +8165,7 @@ const spawn = {
                     index: null,
                 }
                 for (let i = 0; i < powerUp.length; i++) {
-                    if (Matter.Query.ray(map, this.position, powerUp[i].position).length === 0) {
+                    if (!Matter.Query.rayAny(map, this.position, powerUp[i].position)) {
                         const dist = Vector.magnitude(Vector.sub(this.position, powerUp[i].position))
                         if (dist < close.dist) {
                             close = {
@@ -8148,7 +8200,7 @@ const spawn = {
                     //go eat blocks to heal?
                     // } else if (this.health < 0.6) {
 
-                } else if (Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 && !m.isCloak) { //chase player
+                } else if (!Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) && !m.isCloak) { //chase player
                     this.seePlayer.yes = true;
                     this.locatePlayer();
                     if (!this.seePlayer.yes) this.seePlayer.yes = true;
@@ -8160,7 +8212,7 @@ const spawn = {
                     } else {
                         for (let i = 0; i < 55; i++) { //if lost player lock onto a player location in history
                             let history = m.history[(simulation.cycle - 10 * i) % 600]
-                            if (Matter.Query.ray(map, this.position, history.position).length === 0) {
+                            if (!Matter.Query.rayAny(map, this.position, history.position)) {
                                 move(history.position) //go after where you last saw the player
                                 break
                             }
@@ -8305,7 +8357,7 @@ const spawn = {
             //check for player collisions in between each segment
             if (m.immuneCycle < m.cycle) {
                 for (let i = 0; i < this.history.length - 1; i++) {
-                    if (Matter.Query.ray([player], this.history[i], this.history[i + 1], 10).length > 0) {
+                    if (Matter.Query.rayAny([player], this.history[i], this.history[i + 1], 10)) {
                         m.immuneCycle = m.cycle + m.collisionImmuneCycles + 60
                         const dmg = 0.15 * this.damageScale()
                         m.takeDamage(dmg);
@@ -8350,7 +8402,7 @@ const spawn = {
 
 
                     for (let i = 0; i < body.length; i++) {
-                        if (!body[i].isInvulnerable && !body[i].isNotHoldable) {
+                        if (!body[i].isInvulnerable && !body[i].isNotHoldable && !body[i].isImmutable) {
                             const diff = Vector.sub(this.position, body[i].position);
                             const distance = Vector.magnitude(diff);
                             // if within range, apply an outward force
@@ -8392,7 +8444,7 @@ const spawn = {
                     index: null,
                 }
                 for (let i = 0; i < powerUp.length; i++) {
-                    if (Matter.Query.ray(map, this.position, powerUp[i].position).length === 0) {
+                    if (!Matter.Query.rayAny(map, this.position, powerUp[i].position)) {
                         const dist = Vector.magnitude(Vector.sub(this.position, powerUp[i].position))
                         if (dist < close.dist) {
                             close = {
@@ -8422,7 +8474,7 @@ const spawn = {
                         ctx.lineWidth = 4
                         ctx.stroke();
                     }
-                } else if (Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 && !m.isCloak) { //chase player
+                } else if (!Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) && !m.isCloak) { //chase player
                     this.seePlayer.yes = true;
                     this.locatePlayer();
                     if (!this.seePlayer.yes) this.seePlayer.yes = true;
@@ -8434,7 +8486,7 @@ const spawn = {
                     } else {
                         for (let i = 0; i < 55; i++) { //if lost player lock onto a player location in history
                             let history = m.history[(simulation.cycle - 10 * i) % 600]
-                            if (Matter.Query.ray(map, this.position, history.position).length === 0) {
+                            if (!Matter.Query.rayAny(map, this.position, history.position)) {
                                 move(history.position) //go after where you last saw the player
                                 break
                             }
@@ -8535,7 +8587,7 @@ const spawn = {
                         this.fireCycle = 0
                         this.torque += (0.00008 + 0.00007 * Math.random()) * this.inertia * (Math.round(Math.random()) * 2 - 1) //randomly spin around after firing
                         //is player in beam path
-                        if (Matter.Query.ray([player], this.fireTarget, this.position).length) {
+                        if (Matter.Query.rayAny([player], this.fireTarget, this.position)) {
                             unit = Vector.mult(Vector.normalise(Vector.sub(this.vertices[1], this.position)), this.distanceToPlayer() - 100)
                             this.fireTarget = Vector.add(this.vertices[1], unit)
                         }
@@ -8710,7 +8762,7 @@ const spawn = {
                         this.fireCycle = 0
                         this.torque += (0.00008 + 0.00007 * Math.random()) * this.inertia * (Math.round(Math.random()) * 2 - 1) //randomly spin around after firing
                         //is player in beam path
-                        if (Matter.Query.ray([player], this.fireTarget, this.position).length) {
+                        if (Matter.Query.rayAny([player], this.fireTarget, this.position)) {
                             unit = Vector.mult(Vector.normalise(Vector.sub(this.vertices[1], this.position)), this.distanceToPlayer() - 100)
                             this.fireTarget = Vector.add(this.vertices[1], unit)
                         }
@@ -8842,7 +8894,7 @@ const spawn = {
             if (
                 // m.isCloak ||
                 dot > 0.03 || // not looking at target
-                Matter.Query.ray(map, this.fireTarget, this.position).length || Matter.Query.ray(body, this.fireTarget, this.position).length || //something blocking line of sight
+                Matter.Query.rayAny(map, this.fireTarget, this.position) || Matter.Query.rayAny(body, this.fireTarget, this.position) || //something blocking line of sight
                 Vector.magnitude(Vector.sub(m.pos, this.fireTarget)) > 1000 // distance from player to target is very far,  (this is because dot product can't tell if facing 180 degrees away)
             ) {
                 this.isFiring = false
@@ -8866,7 +8918,7 @@ const spawn = {
                         this.fireCycle = 0
                         this.torque += (0.00002 + 0.0002 * Math.random()) * this.inertia * (Math.round(Math.random()) * 2 - 1) //randomly spin around after firing
                         //is player in beam path
-                        if (Matter.Query.ray([player], this.fireTarget, this.position).length) {
+                        if (Matter.Query.rayAny([player], this.fireTarget, this.position)) {
                             unit = Vector.mult(Vector.normalise(Vector.sub(this.vertices[1], this.position)), this.distanceToPlayer() - 100)
                             this.fireTarget = Vector.add(this.vertices[1], unit)
                         }
@@ -9319,8 +9371,8 @@ const spawn = {
                     best = vertexCollision(this.position, look, m.isCloak ? [map, body] : [map, body, [playerBody, playerHead]]);
 
                     // hitting player
-                    if ((best.who === playerBody || best.who === playerHead) && m.immuneCycle < m.cycle) {
-                        const dmg = 0.003 * this.damageScale();
+                    if (!(m.cycle % 2) && (best.who === playerBody || best.who === playerHead) && m.immuneCycle < m.cycle) {
+                        const dmg = 0.006 * this.damageScale();
                         m.takeDamage(dmg);
                         //draw damage
                         ctx.fillStyle = color;
@@ -9837,7 +9889,7 @@ const spawn = {
             if (!(simulation.cycle % this.seePlayerFreq)) { // this.seePlayerCheck();  from mobs
                 if (
                     this.distanceToPlayer2() < this.seeAtDistance2 &&
-                    Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
+                    !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
                     // Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0 &&
                     !m.isCloak
                 ) {
@@ -9896,7 +9948,7 @@ const spawn = {
             if (!(simulation.cycle % this.seePlayerFreq)) { // this.seePlayerCheck();  from mobs
                 if (
                     this.distanceToPlayer2() < this.seeAtDistance2 &&
-                    Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
+                    !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
                     !m.isCloak
                 ) {
                     this.foundPlayer();
@@ -9925,7 +9977,7 @@ const spawn = {
                 const angle = 300 / Vector.magnitude(sub)
                 let rotate = angle * (Math.random() < 0.5 ? 1 : -1)
                 let where = Vector.add(m.pos, Vector.rotate(sub, rotate))
-                if (Matter.Query.ray(map, this.position, where).length === 0) {
+                if (!Matter.Query.rayAny(map, this.position, where)) {
                     Matter.Body.setPosition(this, where)
                     ctx.lineTo(this.position.x, this.position.y);
                     ctx.lineWidth = radius * 2.1;
@@ -9934,7 +9986,7 @@ const spawn = {
                 } else { //try the other direction
                     rotate *= -1
                     where = Vector.add(m.pos, Vector.rotate(sub, rotate)) //negative rotate
-                    if (Matter.Query.ray(map, this.position, where).length === 0) {
+                    if (!Matter.Query.rayAny(map, this.position, where)) {
                         Matter.Body.setPosition(this, where)
                         ctx.lineTo(this.position.x, this.position.y);
                         ctx.lineWidth = radius * 2.1;
@@ -9943,7 +9995,7 @@ const spawn = {
                     } else {
                         rotate *= 0.5 //try the other direction and shorter distance
                         where = Vector.add(m.pos, Vector.rotate(sub, rotate)) //negative rotate
-                        if (Matter.Query.ray(map, this.position, where).length === 0) {
+                        if (!Matter.Query.rayAny(map, this.position, where)) {
                             Matter.Body.setPosition(this, where)
                             ctx.lineTo(this.position.x, this.position.y);
                             ctx.lineWidth = radius * 2.1;
@@ -9952,7 +10004,7 @@ const spawn = {
                         } else {
                             rotate *= -1 //try the other direction and shorter distance
                             where = Vector.add(m.pos, Vector.rotate(sub, rotate)) //negative rotate
-                            if (Matter.Query.ray(map, this.position, where).length === 0) {
+                            if (!Matter.Query.rayAny(map, this.position, where)) {
                                 Matter.Body.setPosition(this, where)
                                 ctx.lineTo(this.position.x, this.position.y);
                                 ctx.lineWidth = radius * 2.1;
@@ -10006,7 +10058,7 @@ const spawn = {
             if (!(simulation.cycle % this.seePlayerFreq)) { // this.seePlayerCheck();  from mobs
                 if (
                     this.distanceToPlayer2() < this.seeAtDistance2 &&
-                    Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
+                    !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
                     !m.isCloak
                 ) {
                     this.foundPlayer();
@@ -10019,7 +10071,7 @@ const spawn = {
             this.checkStatus();
             if (this.distanceToPlayer() < 500) {
                 this.accelMag = 0.0015 //faster when close
-                if (!this.isSlashing && m.immuneCycle < m.cycle && Matter.Query.ray(map, this.position, m.pos).length === 0) this.sword = this.swordWaiting
+                if (!this.isSlashing && m.immuneCycle < m.cycle && !Matter.Query.rayAny(map, this.position, m.pos)) this.sword = this.swordWaiting
             } else {
                 this.accelMag = 0.0004
             }
@@ -10037,7 +10089,7 @@ const spawn = {
                 const angle = 300 / Vector.magnitude(sub)
                 let rotate = angle * (Math.random() < 0.5 ? 1 : -1)
                 let where = Vector.add(m.pos, Vector.rotate(sub, rotate))
-                if (Matter.Query.ray(map, this.position, where).length === 0) {
+                if (!Matter.Query.rayAny(map, this.position, where)) {
                     Matter.Body.setPosition(this, where)
                     ctx.lineTo(this.position.x, this.position.y);
                     ctx.lineWidth = radius * 2.1;
@@ -10046,7 +10098,7 @@ const spawn = {
                 } else { //try the other direction
                     rotate *= -1
                     where = Vector.add(m.pos, Vector.rotate(sub, rotate)) //negative rotate
-                    if (Matter.Query.ray(map, this.position, where).length === 0) {
+                    if (!Matter.Query.rayAny(map, this.position, where)) {
                         Matter.Body.setPosition(this, where)
                         ctx.lineTo(this.position.x, this.position.y);
                         ctx.lineWidth = radius * 2.1;
@@ -10055,7 +10107,7 @@ const spawn = {
                     } else {
                         rotate *= 0.5 //try the other direction and shorter distance
                         where = Vector.add(m.pos, Vector.rotate(sub, rotate)) //negative rotate
-                        if (Matter.Query.ray(map, this.position, where).length === 0) {
+                        if (!Matter.Query.rayAny(map, this.position, where)) {
                             Matter.Body.setPosition(this, where)
                             ctx.lineTo(this.position.x, this.position.y);
                             ctx.lineWidth = radius * 2.1;
@@ -10064,7 +10116,7 @@ const spawn = {
                         } else {
                             rotate *= -1 //try the other direction and shorter distance
                             where = Vector.add(m.pos, Vector.rotate(sub, rotate)) //negative rotate
-                            if (Matter.Query.ray(map, this.position, where).length === 0) {
+                            if (!Matter.Query.rayAny(map, this.position, where)) {
                                 Matter.Body.setPosition(this, where)
                                 ctx.lineTo(this.position.x, this.position.y);
                                 ctx.lineWidth = radius * 2.1;
@@ -10256,7 +10308,379 @@ const spawn = {
             ctx.setLineDash([]);
         }
     },
-    sprayBoss(x, y, radius = 40, isSpawnBossPowerUp = true) {
+    flockBossChaos(x, y, num = 210, isSpawnBossPowerUp = false) {
+        const flockZone = { x: 225, y: -1800, width: 2525, height: 1800 }
+        const flockZoneRight = flockZone.x + flockZone.width
+        const flockZoneBottom = flockZone.y + flockZone.height
+        const flockZoneBounce = 0.8
+        const flockZoneReturnSpeed = 5
+        const radius = 17
+        const worldScale = 950
+        const steeringGain = 0.0003
+        const maxSteeringAcceleration = 0.024 //this controls speed
+        const flockFrictionAir = 0.9
+        const gravitation = 0.02
+        const softeningDistance = 0.005 * worldScale
+        const friendVelocityScale = 0.12 * worldScale
+        const enemyVelocityScale = 0.07 * worldScale
+        const playerTargetCount = 1
+        const playerFollowerTrainCount = 2
+        const playerFollowerCount = 4
+        const playerTargetRadiusScale = 2//1.35
+        const playerTargetGrowthRate = 1.002
+        const flockInvulnerabilityCycles = 100
+        const fullInvulnerabilityFlockCount = 100
+        const noInvulnerabilityFlockCount = 40
+        const flockOrigin = { x: x, y: y }
+        const flockFill = "#000"//"rgb(35, 167, 190)"
+        const playerTargetFill = "#000"//"rgb(0, 124, 146)"
+        const playerMemoryTarget = { position: { x: x, y: y } }
+        const spawnSpread = 0.9 * worldScale
+        const spiralArms = 4
+        const spiralTurns = 2
+        const spiralRotation = Math.random() * 2 * Math.PI
+        const mobsPerSpiralArm = Math.ceil(num / spiralArms)
+        const flock = []
+        const aliveFlock = []
+        const followerChoices = []
+        const playerTargetGroups = []
+        for (let i = 0; i < playerTargetCount; i++) {
+            playerTargetGroups.push({
+                index: i,
+                target: undefined,
+                followerTrains: Array.from({ length: playerFollowerTrainCount }, () => [])
+            })
+        }
+        let flockInvulnerabilityEndCycle = 0
+        const bounceOffFlockZone = (who) => {
+            const bodyRadius = who.radius || radius
+            const left = flockZone.x + bodyRadius
+            const right = flockZoneRight - bodyRadius
+            const top = flockZone.y + bodyRadius
+            const bottom = flockZoneBottom - bodyRadius
+            let positionX = who.position.x
+            let positionY = who.position.y
+            let velocityX = who.velocity.x
+            let velocityY = who.velocity.y
+            let isPositionChanged = false
+            let isVelocityChanged = false
+            if (positionX < left) {
+                positionX = left
+                velocityX = Math.max(flockZoneReturnSpeed, -velocityX * flockZoneBounce + flockZoneReturnSpeed)
+                isPositionChanged = true
+                isVelocityChanged = true
+            } else if (positionX > right) {
+                positionX = right
+                velocityX = Math.min(-flockZoneReturnSpeed, -velocityX * flockZoneBounce - flockZoneReturnSpeed)
+                isPositionChanged = true
+                isVelocityChanged = true
+            }
+            if (positionY < top) {
+                positionY = top
+                velocityY = Math.max(flockZoneReturnSpeed, -velocityY * flockZoneBounce + flockZoneReturnSpeed)
+                isPositionChanged = true
+                isVelocityChanged = true
+            } else if (positionY > bottom) {
+                positionY = bottom
+                velocityY = Math.min(-flockZoneReturnSpeed, -velocityY * flockZoneBounce - flockZoneReturnSpeed)
+                isPositionChanged = true
+                isVelocityChanged = true
+            }
+            if (isPositionChanged) Matter.Body.setPosition(who, { x: positionX, y: positionY })
+            if (isVelocityChanged) Matter.Body.setVelocity(who, { x: velocityX, y: velocityY })
+        }
+        const pickFlockMob = (firstExclude, secondExclude) => {
+            const len = aliveFlock.length
+            if (!len) return
+            const start = Math.floor(Math.random() * len)
+            for (let i = 0; i < len; i++) {
+                const who = aliveFlock[(start + i) % len]
+                if (who.alive && who !== firstExclude && who !== secondExclude) return who
+            }
+        }
+        const removeFlockMob = (who) => {
+            const index = who.flockAliveIndex
+            const last = aliveFlock.pop()
+            if (last && last !== who) {
+                aliveFlock[index] = last
+                last.flockAliveIndex = index
+            }
+            who.flockAliveIndex = -1
+        }
+        const startFlockInvulnerability = () => {
+            let duration = flockInvulnerabilityCycles
+            if (aliveFlock.length <= noInvulnerabilityFlockCount) {
+                duration = 0
+            } else if (aliveFlock.length < fullInvulnerabilityFlockCount) {
+                duration *= (aliveFlock.length - noInvulnerabilityFlockCount) /
+                    (fullInvulnerabilityFlockCount - noInvulnerabilityFlockCount)
+            }
+            flockInvulnerabilityEndCycle = Math.max(flockInvulnerabilityEndCycle, simulation.cycle + duration)
+            if (flockInvulnerabilityEndCycle > simulation.cycle) {
+                for (let i = 0; i < aliveFlock.length; i++) {
+                    const who = aliveFlock[i]
+                    who.isInvulnerable = true
+                    who.flockInvulnerabilityEndCycle = flockInvulnerabilityEndCycle
+                    who.damageReduction = 0
+                    who.fill = "#fff"
+                }
+            }
+        }
+        const updateFlockInvulnerability = (who) => {
+            if (who.isInvulnerable && simulation.cycle >= who.flockInvulnerabilityEndCycle) {
+                who.isInvulnerable = false
+                who.damageReduction = who.startingDamageReduction
+                who.fill = who.isFlockPlayerTarget ? playerTargetFill : flockFill
+            }
+        }
+        const linkPlayerFollowerTrain = (group, trainIndex) => {
+            const train = group.followerTrains[trainIndex]
+            let followTarget = group.target
+            for (let i = 0; i < train.length; i++) {
+                const follower = train[i]
+                follower.isFlockPlayerFollower = true
+                follower.flockPlayerFollowerGroup = group.index
+                follower.flockPlayerFollowerTrain = trainIndex
+                follower.flockPlayerFollowTarget = followTarget
+                follower.flockFriend = followTarget
+                followTarget = follower
+            }
+        }
+        const linkPlayerFollowers = (group) => {
+            for (let i = 0; i < group.followerTrains.length; i++) linkPlayerFollowerTrain(group, i)
+        }
+        const clearPlayerFollowers = (group) => {
+            for (let trainIndex = 0; trainIndex < group.followerTrains.length; trainIndex++) {
+                const train = group.followerTrains[trainIndex]
+                for (let i = 0; i < train.length; i++) {
+                    const follower = train[i]
+                    follower.isFlockPlayerFollower = false
+                    follower.flockPlayerFollowerGroup = -1
+                    follower.flockPlayerFollowerTrain = -1
+                    if (follower.flockFriend === follower.flockPlayerFollowTarget) follower.flockFriend = undefined
+                    follower.flockPlayerFollowTarget = undefined
+                }
+                train.length = 0
+            }
+        }
+        const assignPlayerFollowers = (group, exclude) => {
+            clearPlayerFollowers(group)
+            if (!group.target || !group.target.alive) return
+
+            followerChoices.length = 0
+            for (let i = 0; i < aliveFlock.length; i++) {
+                const who = aliveFlock[i]
+                if (who !== exclude && !who.isFlockPlayerTarget && !who.isFlockPlayerFollower) followerChoices.push(who)
+            }
+            for (let trainIndex = 0; trainIndex < group.followerTrains.length; trainIndex++) {
+                const train = group.followerTrains[trainIndex]
+                for (let i = 0; i < playerFollowerCount && followerChoices.length; i++) {
+                    const index = Math.floor(Math.random() * followerChoices.length)
+                    const follower = followerChoices[index]
+                    followerChoices[index] = followerChoices[followerChoices.length - 1]
+                    followerChoices.pop()
+                    train.push(follower)
+                }
+            }
+            linkPlayerFollowers(group)
+        }
+        const replacePlayerFollower = (who) => {
+            const group = playerTargetGroups[who.flockPlayerFollowerGroup]
+            const trainIndex = who.flockPlayerFollowerTrain
+            const train = group && group.followerTrains[trainIndex]
+            const followerIndex = train ? train.indexOf(who) : -1
+            who.isFlockPlayerFollower = false
+            who.flockPlayerFollowerGroup = -1
+            who.flockPlayerFollowerTrain = -1
+            who.flockPlayerFollowTarget = undefined
+            if (followerIndex === -1) return
+            train.splice(followerIndex, 1)
+            if (!group.target || !group.target.alive) return
+
+            const len = aliveFlock.length
+            const start = Math.floor(Math.random() * len)
+            for (let i = 0; i < len; i++) {
+                const replacement = aliveFlock[(start + i) % len]
+                if (replacement !== who && !replacement.isFlockPlayerTarget && !replacement.isFlockPlayerFollower) {
+                    train.splice(followerIndex, 0, replacement)
+                    break
+                }
+            }
+            linkPlayerFollowerTrain(group, trainIndex)
+        }
+        const passPlayerTarget = (group, who) => {
+            who.fill = flockFill
+            const start = who.flockIndex
+            let next
+            for (let pass = 0; pass < 2 && !next; pass++) {
+                for (let i = 1; i < flock.length; i++) {
+                    const candidate = flock[(start + i) % flock.length]
+                    if (candidate !== who && candidate.alive && !candidate.isFlockPlayerTarget &&
+                        (pass === 1 || !candidate.isFlockPlayerFollower)) {
+                        next = candidate
+                        break
+                    }
+                }
+            }
+            if (next) {
+                if (next.isFlockPlayerFollower) replacePlayerFollower(next)
+                next.isFlockPlayerTarget = true
+                next.flockPlayerTargetGroup = group.index
+                next.fill = playerTargetFill
+                group.target = next
+                assignPlayerFollowers(group, who)
+                return
+            }
+            group.target = undefined
+            clearPlayerFollowers(group)
+        }
+        const updatePlayerTargetSize = (who) => {
+            const targetRadius = radius * (who.isFlockPlayerTarget ? playerTargetRadiusScale : 1)
+            if (Math.abs(who.radius - targetRadius) > 0.01) {
+                const scale = who.radius < targetRadius ?
+                    Math.min(playerTargetGrowthRate, targetRadius / who.radius) :
+                    Math.max(1 / playerTargetGrowthRate, targetRadius / who.radius)
+                Matter.Body.scale(who, scale, scale)
+                who.radius *= scale
+            }
+        }
+        const playerTargetWithMemory = () => {
+            if (!m.isCloak) {
+                playerMemoryTarget.position.x = player.position.x
+                playerMemoryTarget.position.y = player.position.y
+                return player
+            }
+            return playerMemoryTarget
+        }
+        let relationshipCycle = -1
+        const updateRelationships = () => {
+            if (relationshipCycle === simulation.cycle) return
+            relationshipCycle = simulation.cycle
+            if (Math.random() < 0.099) {
+                let who
+                const len = aliveFlock.length
+                const start = Math.floor(Math.random() * len)
+                for (let i = 0; i < len; i++) {
+                    const candidate = aliveFlock[(start + i) % len]
+                    if (!candidate.isFlockPlayerFollower) {
+                        who = candidate
+                        break
+                    }
+                }
+                if (who) {
+                    who.flockFriend = pickFlockMob(who)
+                    who.flockEnemy = pickFlockMob(who, who.flockFriend)
+                }
+            }
+        }
+        for (let i = 0; i < num; i++) {
+            const arm = i % spiralArms
+            const step = Math.floor(i / spiralArms)
+            const progress = (step + 0.5) / mobsPerSpiralArm
+            const angle = spiralRotation + arm * 2 * Math.PI / spiralArms + progress * spiralTurns * 2 * Math.PI
+            const distance = spawnSpread * Math.sqrt(progress)
+            const spawnX = x + distance * Math.cos(angle)
+            const spawnY = y + distance * Math.sin(angle)
+            const playerTargetGroupIndex = i < playerTargetCount ? i : -1
+            mobs.spawn(spawnX, spawnY, 6, radius, playerTargetGroupIndex === -1 ? flockFill : playerTargetFill);
+            const me = mob[mob.length - 1];
+            flock.push(me)
+            me.flockIndex = flock.length - 1
+            me.flockAliveIndex = aliveFlock.length
+            aliveFlock.push(me)
+            me.isFlock = true
+            me.isBoss = true
+            me.isVerticesChange = true
+            me.isFlockPlayerTarget = playerTargetGroupIndex !== -1
+            me.flockPlayerTargetGroup = playerTargetGroupIndex
+            me.isFlockPlayerFollower = false
+            me.flockPlayerFollowerGroup = -1
+            me.flockPlayerFollowerTrain = -1
+            if (me.isFlockPlayerTarget) playerTargetGroups[playerTargetGroupIndex].target = me
+            me.collisionFilter.mask = cat.player | cat.body | cat.bullet //| cat.map
+            me.damageReduction = 0.2
+            me.startingDamageReduction = me.damageReduction
+            me.isInvulnerable = false
+            me.inertia = Infinity;
+            me.frictionAir = flockFrictionAir
+            me.stroke = "transparent";
+            me.restitution = 1
+            me.onDeath = function () {
+                removeFlockMob(this)
+                if (this.isFlockPlayerTarget) {
+                    const group = playerTargetGroups[this.flockPlayerTargetGroup]
+                    this.isFlockPlayerTarget = false
+                    this.flockPlayerTargetGroup = -1
+                    group.target = undefined
+                    clearPlayerFollowers(group)
+                    passPlayerTarget(group, this)
+                    startFlockInvulnerability()
+                } else if (this.isFlockPlayerFollower) {
+                    replacePlayerFollower(this)
+                }
+                if (isSpawnBossPowerUp && aliveFlock.length === 0) {
+                    powerUps.spawnBossPowerUp(this.position.x, this.position.y)
+                } else {
+                    this.leaveBody = false;
+                    this.isDropPowerUp = false;
+                    // powerUps.spawnRandomPowerUp(this.position.x, this.position.y) // manual power up spawn to avoid spawning too many tech with "symbiosis"
+                }
+            }
+            me.do = function () {
+                this.checkStatus();
+                updateFlockInvulnerability(this)
+                updatePlayerTargetSize(this)
+                updateRelationships()
+                bounceOffFlockZone(this)
+
+                if (this.isFlockPlayerFollower && this.flockPlayerFollowTarget && this.flockPlayerFollowTarget.alive) {
+                    this.flockFriend = this.flockPlayerFollowTarget
+                    if (!this.flockEnemy || !this.flockEnemy.alive) this.flockEnemy = pickFlockMob(this, this.flockFriend)
+                } else {
+                    if (!this.flockFriend || !this.flockFriend.alive) {
+                        this.flockFriend = pickFlockMob(this, this.flockEnemy)
+                    }
+                    if (!this.flockEnemy || !this.flockEnemy.alive) this.flockEnemy = pickFlockMob(this, this.flockFriend)
+                }
+
+                let targetVelocityX = (flockOrigin.x - this.position.x) * gravitation
+                let targetVelocityY = (flockOrigin.y - this.position.y) * gravitation
+                const friendTarget = this.isFlockPlayerTarget && !this.isInvulnerable ? playerTargetWithMemory() : this.flockFriend
+                if (friendTarget) {
+                    const dx = friendTarget.position.x - this.position.x
+                    const dy = friendTarget.position.y - this.position.y
+                    const scale = friendVelocityScale / (softeningDistance + Math.sqrt(dx * dx + dy * dy))
+                    targetVelocityX += dx * scale
+                    targetVelocityY += dy * scale
+                }
+                if (this.flockEnemy) {
+                    const dx = this.flockEnemy.position.x - this.position.x
+                    const dy = this.flockEnemy.position.y - this.position.y
+                    const scale = enemyVelocityScale / (softeningDistance + Math.sqrt(dx * dx + dy * dy))
+                    targetVelocityX -= dx * scale
+                    targetVelocityY -= dy * scale
+                }
+
+                let steeringAccelerationX = (targetVelocityX - this.velocity.x) * steeringGain
+                let steeringAccelerationY = (targetVelocityY - this.velocity.y) * steeringGain
+                const steeringMagnitude = Math.sqrt(steeringAccelerationX * steeringAccelerationX + steeringAccelerationY * steeringAccelerationY)
+                if (steeringMagnitude > maxSteeringAcceleration) {
+                    const scale = maxSteeringAcceleration / steeringMagnitude
+                    steeringAccelerationX *= scale
+                    steeringAccelerationY *= scale
+                }
+                this.force.x += steeringAccelerationX * this.mass
+                this.force.y += steeringAccelerationY * this.mass
+            };
+        }
+
+        for (let i = 0; i < flock.length; i++) {
+            flock[i].flockFriend = pickFlockMob(flock[i])
+            flock[i].flockEnemy = pickFlockMob(flock[i], flock[i].flockFriend)
+        }
+        for (let i = 0; i < playerTargetGroups.length; i++) assignPlayerFollowers(playerTargetGroups[i])
+    },
+    sprayBoss(x, y, radius = 40, isSpawnBossPowerUp = false) {
         mobs.spawn(x, y, 16, radius, "rgb(255,255,255)");
         let me = mob[mob.length - 1];
         me.isBoss = true;
@@ -10269,7 +10693,7 @@ const spawn = {
         me.frictionAir = 0;
         me.restitution = 1
         Matter.Body.setDensity(me, 0.002 + 0.00005 * Math.sqrt(simulation.difficulty)); //extra dense //normal is 0.001 //makes effective life much larger
-        me.damageReduction = 0.25
+        me.damageReduction = 0.22
         me.startingDamageReduction = me.damageReduction
         me.isInvulnerable = false
         me.nextHealthThreshold = 0.75
@@ -10962,7 +11386,7 @@ const spawn = {
             if (this.distanceToPlayer2() < this.seeAtDistance2) { //2000
                 //close to player, go slow
                 me.accelMag = 0.023 //can't follow track above 1.1
-                if ((Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0) && !m.isCloak) this.foundPlayer();
+                if ((!Matter.Query.rayAny(map, this.position, this.playerPosRandomY())) && !m.isCloak) this.foundPlayer();
             } else {
                 //far from player, go fast
                 me.accelMag = 0.1 //can't follow track above 1.1
@@ -11167,7 +11591,7 @@ const spawn = {
             if (this.distanceToPlayer2() < this.seeAtDistance2) { //2000
                 //close to player, go slow
                 me.accelMag = 0.03 //can't follow track above 1.1
-                if ((Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0) && !m.isCloak) this.foundPlayer();
+                if ((!Matter.Query.rayAny(map, this.position, this.playerPosRandomY())) && !m.isCloak) this.foundPlayer();
             } else {
                 //far from player, go fast
                 me.accelMag = 0.1 //can't follow track above 1.1
@@ -11343,8 +11767,8 @@ const spawn = {
                 this.cd < simulation.cycle &&
                 this.distanceToPlayer2() < seeDistance2 &&
                 !m.isCloak &&
-                Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
-                Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
+                !Matter.Query.rayAny(body, this.position, this.playerPosRandomY())
             ) {
                 //find vertex farthest away from player
                 // let dist = 0
@@ -11472,8 +11896,8 @@ const spawn = {
                 this.seePlayer.recall &&
                 this.cd < simulation.cycle &&
                 this.distanceToPlayer2() < seeDistance2 &&
-                Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
-                Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
+                !Matter.Query.rayAny(body, this.position, this.playerPosRandomY())
             ) {
                 //find vertex farthest away from player
                 let dist = 0
@@ -11572,8 +11996,8 @@ const spawn = {
                 this.seePlayer.recall &&
                 this.cd < simulation.cycle &&
                 this.distanceToPlayer2() < seeDistance2 &&
-                Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
-                Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
+                !Matter.Query.rayAny(body, this.position, this.playerPosRandomY())
             ) {
                 this.laserAngle = -Math.PI / 6
                 this.sword = this.swordGrow
@@ -11670,8 +12094,8 @@ const spawn = {
                 this.seePlayer.recall &&
                 this.cd < simulation.cycle &&
                 this.distanceToPlayer2() < seeDistance2 &&
-                Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
-                Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
+                !Matter.Query.rayAny(body, this.position, this.playerPosRandomY())
             ) {
                 //find vertex closest to the player
                 let dist = Infinity
@@ -11787,8 +12211,8 @@ const spawn = {
                 this.seePlayer.recall &&
                 this.cd < simulation.cycle &&
                 this.distanceToPlayer2() < seeDistance2 &&
-                Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
-                Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
+                !Matter.Query.rayAny(body, this.position, this.playerPosRandomY())
             ) {
                 //find vertex closest to the player
                 let dist = Infinity
@@ -12008,8 +12432,8 @@ const spawn = {
                 this.seePlayer.recall &&
                 this.cd < simulation.cycle &&
                 this.distanceToPlayer2() < seeDistance2 &&
-                Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 &&
-                Matter.Query.ray(body, this.position, this.playerPosRandomY()).length === 0
+                !Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) &&
+                !Matter.Query.rayAny(body, this.position, this.playerPosRandomY())
             ) {
                 //find vertex closest to the player
                 let dist = Infinity
@@ -12321,14 +12745,14 @@ const spawn = {
             }
             this.gravity();
             if (!(simulation.cycle % this.seePlayerFreq)) {
-                if (Matter.Query.ray(map, this.position, this.playerPosRandomY()).length === 0 && !m.isCloak) {
+                if (!Matter.Query.rayAny(map, this.position, this.playerPosRandomY()) && !m.isCloak) {
                     this.foundPlayer();
                 } else if (this.seePlayer.recall) {
                     this.lostPlayer();
                     if (!m.isCloak) {
                         for (let i = 0; i < 20; i++) { //if lost player lock onto a player location in history
                             let history = m.history[(simulation.cycle - 10 * i) % 600]
-                            if (Matter.Query.ray(map, this.position, history.position).length === 0) {
+                            if (!Matter.Query.rayAny(map, this.position, history.position)) {
                                 this.seePlayer.recall = this.memory + Math.round(this.memory * Math.random()); //cycles before mob falls a sleep
                                 this.seePlayer.position.x = history.position.x;
                                 this.seePlayer.position.y = history.position.y;
@@ -13265,6 +13689,7 @@ const spawn = {
         me.frictionAir = 0.05;
         me.torque = 0.0001 * me.inertia * (Math.random() > 0.5 ? -1 : 1)
         me.fireDir = { x: 0, y: 0 };
+        me.isFreezeAuraOnDeath = true
         me.onDeath = function () { //helps collisions functions work better after vertex have been changed
             setTimeout(() => { //fix mob in place, but allow rotation
                 spawn.freezeGrenade(this.position.x, this.position.y, this.tier);
@@ -14257,7 +14682,7 @@ const spawn = {
             hits() {
                 if (m.immuneCycle < m.cycle) {
                     for (let i = 1; i < this.segments.length - 1; i++) {
-                        if (Matter.Query.ray([player], this.segments[i], this.segments[i + 1], radius).length > 0) {
+                        if (Matter.Query.rayAny([player], this.segments[i], this.segments[i + 1], radius)) {
                             m.immuneCycle = m.cycle + m.collisionImmuneCycles + 60
                             m.takeDamage(this.damage);
                             simulation.drawList.push({ //add dmg to draw queue
@@ -15464,10 +15889,58 @@ const spawn = {
     mapVertex(x, y, vector, properties) { //adds shape to map array
         map[map.length] = Matter.Bodies.fromVertices(x, y, Vertices.fromPath(vector), properties);
     },
-    bodyRectCorner(x, y, w = 800, h = 400, c = 25, properties) {
+    // bodyRectCorner(x, y, w = 800, h = 400, c = 25, properties) {
+    //     w *= 0.5
+    //     h *= 0.5
+    //     const vector = `${w} -${h - c}  ${w} ${h - c}  ${w - c} ${h}  -${w - c} ${h}  -${w} ${h - c}  -${w} -${h - c}  -${w - c} -${h}  ${w - c} -${h}`
+    //     map[map.length] = Matter.Bodies.fromVertices(x, y, Vertices.fromPath(vector), properties);
+    // },
+    bodyRectCornerVector(w = 800, h = 400, c = 25, round = [true, true, true, true]) {
         w *= 0.5
         h *= 0.5
-        const vector = `${w} -${h - c}  ${w} ${h - c}  ${w - c} ${h}  -${w - c} ${h}  -${w} ${h - c}  -${w} -${h - c}  -${w - c} -${h}  ${w - c} -${h}`
+        c = Math.max(0, Math.min(c, w, h))
+        let isRounded
+        if (typeof round === "boolean") {
+            isRounded = [round, round, round, round]
+        } else if (Array.isArray(round)) {
+            isRounded = round
+        } else if (round) {
+            isRounded = [round.topRight, round.bottomRight, round.bottomLeft, round.topLeft]
+        } else {
+            isRounded = [true, true, true, true]
+        }
+        const [topRight, bottomRight, bottomLeft, topLeft] = isRounded.map(corner => corner !== false)
+        const points = []
+        if (topRight) {
+            points.push(`${w} -${h - c}`)
+        } else {
+            points.push(`${w} -${h}`)
+        }
+        if (bottomRight) {
+            points.push(`${w} ${h - c}`, `${w - c} ${h}`)
+        } else {
+            points.push(`${w} ${h}`)
+        }
+        if (bottomLeft) {
+            points.push(`-${w - c} ${h}`, `-${w} ${h - c}`)
+        } else {
+            points.push(`-${w} ${h}`)
+        }
+        if (topLeft) {
+            points.push(`-${w} -${h - c}`, `-${w - c} -${h}`)
+        } else {
+            points.push(`-${w} -${h}`)
+        }
+        if (topRight) points.push(`${w - c} -${h}`)
+        return points.join("  ")
+    },
+    bodyRectCorner(x, y, w = 800, h = 400, c = 25, round = [true, true, true, true], properties) {
+        if (round && !Array.isArray(round) && typeof round !== "boolean" && round.topRight === undefined && round.bottomRight === undefined && round.bottomLeft === undefined && round.topLeft === undefined) {
+            properties = round
+            round = [true, true, true, true]
+        }
+        const vector = this.bodyRectCornerVector(w, h, c, round)
+        // console.log(vector)
         map[map.length] = Matter.Bodies.fromVertices(x, y, Vertices.fromPath(vector), properties);
     },
     mapRectNow(x, y, width, height, properties, isRedrawMap = true) { //adds rectangle to map array in the middle of a level

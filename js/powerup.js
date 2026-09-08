@@ -35,8 +35,8 @@ const powerUps = {
     healGiveMaxEnergy: false, //for tech 1st ionization energy
     orb: {
         research(num = 1) {
-            if (num === 1) return `<div class="research-circle"></div> `
-            let text = '<span style="position:relative;">'
+            if (num === 1) return `<div class="research-circle" data-help="orb-research"></div> `
+            let text = '<span data-help="orb-research" style="position:relative;">'
             for (let i = 0; i < num; i++) {
                 text += `<div class="research-circle" style="position:absolute; top:1.5px; left:${i * 0.6}em;"></div>`
             }
@@ -50,9 +50,9 @@ const powerUps = {
             if (powerUps.healGiveMaxEnergy) {
                 switch (num) {
                     case 1:
-                        return `<div class="energy-circle"></div>`
+                        return `<div class="energy-circle" data-help="orb-energy"></div>`
                 }
-                let text = '<span style="position:relative;">'
+                let text = '<span data-help="orb-energy" style="position:relative;">'
                 for (let i = 0; i < num; i++) {
                     text += `<div class="energy-circle" style="position:absolute; top:1.5px; left:${i * 0.5}em;"></div>`
                 }
@@ -62,9 +62,9 @@ const powerUps = {
                 }
                 return text
             } else {
-                if (num === 1) return `<div class="heal-circle"></div>`
+                if (num === 1) return `<div class="heal-circle" data-help="orb-heal"></div>`
 
-                let text = '<span style="position:relative;">'
+                let text = '<span data-help="orb-heal" style="position:relative;">'
                 for (let i = 0; i < num; i++) {
                     text += `<div class="heal-circle" style="position:absolute; top:1px; left:${i * 0.6}em;"></div>`
                 }
@@ -74,28 +74,45 @@ const powerUps = {
             }
         },
         tech(num = 1) {
-            return `<div class="circle-grid tech tooltip" style="width: 1.32em; height: 1.32em;"><span class="tooltiptext color-m">tech</span></div>`
+            return `<div class="circle-grid tech" data-help="orb-tech" style="width: 1.32em; height: 1.32em;"></div>`
         },
         field(num = 1) {
-            return `<div class="circle-grid field tooltip"><span class="tooltiptext color-f">field</span></div>`
+            return `<div class="circle-grid field" data-help="orb-field"></div>`
         },
         gun(num = 1) {
-            return `<div class="circle-grid gun tooltip"><span class="tooltiptext color-g">gun</span></div>`
+            return `<div class="circle-grid gun" data-help="orb-gun"></div>`
         },
         gunTech(num = 1) {
-            return `<div class="circle-grid tech tooltip" style="position:relative; top:-0.05em; left:0.55em;opacity:0.8;margin-left:-0.55em;"><span class="tooltiptext"><span class="color-g">gun</span><span class="color-m">tech</span></span></div>
-                    <div class="circle-grid gun tooltip" style="position:relative; top:-0.05em; left:-0.55em; opacity:0.65;margin-right:-0.55em;"><span class="tooltiptext"><span class="color-g">gun</span><span class="color-m">tech</span></span></div>`
+            return `<span data-help="orb-gun-tech"><div class="circle-grid tech" style="position:relative; top:-0.05em; left:0.55em;opacity:0.8;margin-left:-0.55em;"></div>
+                    <div class="circle-grid gun" style="position:relative; top:-0.05em; left:-0.55em; opacity:0.65;margin-right:-0.55em;"></div></span>`
         },
         fieldTech(num = 1) {
-            return `<div class="circle-grid tech tooltip" style="position:relative; top:-0.05em; left:0.55em;opacity:0.8;margin-left:-0.55em;"><span class="tooltiptext"><span class="color-f">field</span><span class="color-m">tech</span></span></div>
-                    <div class="circle-grid field tooltip" style="position:relative; top:-0.05em; left:-0.55em;opacity:0.65;margin-right:-0.55em;"><span class="tooltiptext"><span class="color-f">field</span><span class="color-m">tech</span></span></div>`
+            return `<span data-help="orb-field-tech"><div class="circle-grid tech" style="position:relative; top:-0.05em; left:0.55em;opacity:0.8;margin-left:-0.55em;"></div>
+                    <div class="circle-grid field" style="position:relative; top:-0.05em; left:-0.55em;opacity:0.65;margin-right:-0.55em;"></div></span>`
+        },
+        skin() {
+            return `<span data-help="orb-skin" style="position:relative;top:-0.16em;">
+                        <div class="circle-grid-skin" style="width: 1.15em; height: 1.15em;"></div>
+                        <div class="circle-grid-skin-eye" style="left: 0.8em;"></div>
+                    </span>`
+        },
+        skinUpgrade() {
+            return `<span data-help="orb-skin-upgrade" style="position:relative;">
+                        <div class="circle-grid-title" style="position:absolute; top:0.15em; left:0.5em;opacity:1;">
+                            <span style="position:relative;">
+                                <div class="circle-grid-skin" style="width: 1.15em; height: 1.15em;"></div>
+                                <div class="circle-grid-skin-eye" style="left: 0.8em;"></div>
+                            </span>
+                        </div>
+                        <div class="circle-grid-title tech" style="position:absolute; top:0.08em; left:-0.05em;opacity:0.93;width: 1.32em; height: 1.32em;"></div>
+                    </span>`
         },
         ammo(num = 1) {
             switch (num) {
                 case 1:
-                    return `<div class="ammo-circle"></div>`
+                    return `<div class="ammo-circle" data-help="orb-ammo"></div>`
             }
-            let text = '<span style="position:relative;">'
+            let text = '<span data-help="orb-ammo" style="position:relative;">'
             for (let i = 0; i < num; i++) {
                 text += `<div class="ammo-circle" style="position:absolute; top:1.5px; left:${i * 0.5}em;"></div>`
             }
@@ -108,9 +125,9 @@ const powerUps = {
         coupling(num = 1) {
             switch (num) {
                 case 1:
-                    return `<div class="coupling-circle"></div>`
+                    return `<div class="coupling-circle" data-help="orb-coupling"></div>`
             }
-            let text = '<span style="position:relative;">'
+            let text = '<span data-help="orb-coupling" style="position:relative;">'
             for (let i = 0; i < num; i++) {
                 text += `<div class="coupling-circle" style="position:absolute; top:1.5px; left:${i * 0.5}em;"></div>`
             }
@@ -123,9 +140,9 @@ const powerUps = {
         Casimir(num = 1) {
             switch (num) {
                 case 1:
-                    return `<div class="energy-circle"></div>`
+                    return `<div class="energy-circle" data-help="orb-energy"></div>`
             }
-            let text = '<span style="position:relative;">'
+            let text = '<span data-help="orb-energy" style="position:relative;">'
             for (let i = 0; i < num; i++) {
                 text += `<div class="energy-circle" style="position:absolute; top:1.5px; left:${i * 0.5}em;"></div>`
             }
@@ -138,9 +155,9 @@ const powerUps = {
         boost(num = 1) {
             switch (num) {
                 case 1:
-                    return `<div class="boost-circle"></div>`
+                    return `<div class="boost-circle" data-help="orb-boost"></div>`
             }
-            let text = '<span style="position:relative;">'
+            let text = '<span data-help="orb-boost" style="position:relative;">'
             for (let i = 0; i < num; i++) {
                 text += `<div class="boost-circle" style="position:absolute; top:1.5px; left:${i * 8}px;"></div>`
             }
@@ -325,7 +342,21 @@ const powerUps = {
                 localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
             }
             simulation.inGameConsole(`<div class="circle-grid tech"></div> <span class='color-var'>tech</span>.giveTech("<strong class='color-text'>${tech.tech[index].name}</strong>")`);
+            const isSkin = tech.tech[index].isSkin
             tech.giveTech(index)
+            if (tech.isExtraGunTech && isSkin) {
+                const pool = []
+                for (let j = 0, len = tech.tech.length; j < len; j++) {
+                    if (tech.tech[j].isSkinUpgrade && tech.tech[j].allowed() && tech.tech[j].count < tech.tech[j].maxCount) {
+                        pool.push(j)
+                    }
+                }
+                if (pool.length) {
+                    const index = Math.floor(Math.random() * pool.length)
+                    simulation.inGameConsole(`<span class='color-var'>tech</span>.giveTech("<strong class='color-text'>${tech.tech[pool[index]].name}</strong>")`, 360)
+                    tech.giveTech(pool[index]) // choose from the gun pool
+                }
+            }
         }
         powerUps.endDraft(type);
     },
@@ -426,10 +457,10 @@ const powerUps = {
 
         // if (document.fullscreenElement) mouseMove.isLockPointer = true//this interacts with the mousedown event listener to exit pointer lock
     },
-    animatePowerUpGrab(color) {
+    animatePowerUpGrab(color, count = 25) {
         if (!localSettings.isHideHUD) {
             simulation.ephemera.push({
-                count: 25, //cycles before it self removes
+                count: count, //cycles before it self removes
                 do() {
                     this.count -= 2
                     if (this.count < 5) simulation.removeEphemera(this)
@@ -749,7 +780,7 @@ const powerUps = {
             return 0.1 * tech.largerHeals * (tech.isHalfHeals ? 0.5 : 1)
         },
         descriptionFunction() {
-            return `${powerUps.orb.Casimir(1)} give <strong>${(this.amount() * 100).toFixed(0)}</strong> maximum <strong class='color-f'>energy</strong>${tech.isCasimirHealth ? ` and <strong class='color-h'>health</strong>` : ""}`
+            return `${powerUps.orb.Casimir(1)} give <strong>${(this.amount() * 100).toFixed(0)}</strong> max <strong class='energy' data-help='energy'>energy</strong>${tech.isCasimirHealth ? ` and <strong class='color-h'>health</strong>` : ""}`
         },
         random() {
             if (tech.isCasimirRandom) {
@@ -909,18 +940,22 @@ const powerUps = {
         },
         currentRerollCount: 0,
         expend(count) { //runs when tech spend research
+            let isResearched = false
+            const cap = 200 * (localSettings.isHideHUD ? 0.5 : 1)
             for (let i = 0; i < count; i++) {
                 if (powerUps.research.count > 0) {
                     powerUps.research.changeRerolls(-1)
-                    const cap = 200 * (localSettings.isHideHUD ? 0.5 : 1)
-                    if (tech.isResearchDamage && powerUp.length < cap) {
-                        m.damageDone *= 1.02
-                        simulation.inGameConsole(`<span class='color-var'>tech</span>.<strong class='color-d'>damage</strong> *= ${1.02} //peer review`);
-                        // tech.addJunkTechToPool(0.01)
-                    }
-                    if (tech.isResearchHeal && powerUp.length < cap) {
-                        powerUps.spawn(player.position.x + 150 * (Math.random() - 0.5), player.position.y + 150 * (Math.random() - 0.5), "heal", false);
-                    }
+                    isResearched = true
+                }
+            }
+            if (isResearched) {
+                if (tech.isResearchDamage) {
+                    m.damageDone *= 1.02
+                    simulation.inGameConsole(`<span class='color-var'>tech</span>.<strong class='color-d'>damage</strong> *= ${1.02} //peer review`);
+                    // tech.addJunkTechToPool(0.01)
+                }
+                if (tech.isResearchHeal && powerUp.length < cap) {
+                    powerUps.spawn(player.position.x + 150 * (Math.random() - 0.5), player.position.y + 150 * (Math.random() - 0.5), "heal", false);
                 }
             }
         },
@@ -1042,16 +1077,43 @@ const powerUps = {
         size() {
             return 17;
         },
+        // scarcityGraphic() {
+        //     if (tech.isScarcity && b.guns[b.activeGun].ammo === 0) {
+        //         console.log('scarcity')
+        //         // powerUps.animatePowerUpGrab('#f00')
+        //         simulation.ephemera.push({
+        //             count: 40, //cycles before it self removes
+        //             do() {
+        //                 this.count -= 2
+        //                 if (this.count < 5) simulation.removeEphemera(this)
+
+        //                 ctx.beginPath();
+        //                 ctx.arc(m.pos.x, m.pos.y, Math.max(3, this.count), 0, 2 * Math.PI);
+        //                 ctx.fillStyle = '#f00'
+        //                 ctx.fill();
+        //             },
+        //         })
+        //     }
+        // },
         effect() {
             const couplingExtraAmmo = (m.fieldMode === 10 || m.fieldMode === 0) ? 1 + 0.05 * m.coupling : 1
             if (b.inventory.length > 0) {
-                powerUps.animatePowerUpGrab('rgba(68, 102, 119,0.25)')
+                let animateGrabRadius = 0
                 if (tech.isAmmoForGun && (b.activeGun !== null && b.activeGun !== undefined)) { //give extra ammo to one gun only with tech logistics
                     const name = b.guns[b.activeGun]
                     if (name.ammo !== Infinity) {
                         if (tech.ammoCap) {
-                            name.ammo = Math.ceil(2 * name.ammoPack * tech.ammoCap * couplingExtraAmmo)
+                            animateGrabRadius = 60
+                            if (tech.isScarcity && name.ammo === 0) animateGrabRadius = 85
+                            // console.log(name.ammo, animateGrabRadius)
+                            name.ammo = Math.ceil(2 * name.ammoPack * (tech.ammoCap + ((tech.isScarcity && name.ammo === 0) ? 14 : 0)) * couplingExtraAmmo)
                         } else {
+                            if (tech.isScarcity && name.ammo === 0) {
+                                animateGrabRadius = 85
+                                for (let j = 0; j < 14; j++) name.ammo += Math.ceil((Math.random() + Math.random()) * name.ammoPack * couplingExtraAmmo)
+                            } else {
+                                animateGrabRadius = 50
+                            }
                             name.ammo += Math.ceil(2 * (Math.random() + Math.random()) * name.ammoPack * couplingExtraAmmo)
                         }
                     }
@@ -1060,14 +1122,26 @@ const powerUps = {
                         const name = b.guns[b.inventory[i]]
                         if (name.ammo !== Infinity) {
                             if (tech.ammoCap) {
-                                name.ammo = Math.ceil(name.ammoPack * tech.ammoCap * couplingExtraAmmo)
-                            } else { //default ammo behavior
-                                name.ammo += Math.ceil((Math.random() + Math.random()) * name.ammoPack * couplingExtraAmmo)
+                                if (tech.isScarcity && name.ammo === 0) {
+                                    animateGrabRadius = 85
+                                } else if (animateGrabRadius < 50) {
+                                    animateGrabRadius = 50
+                                }
+                                name.ammo = Math.ceil(name.ammoPack * (tech.ammoCap + ((tech.isScarcity && name.ammo === 0) ? 14 : 0)) * couplingExtraAmmo)
+                            } else {
+                                if (tech.isScarcity && name.ammo === 0) {
+                                    animateGrabRadius = 85
+                                    for (let j = 0; j < 14; j++) name.ammo += Math.ceil((Math.random() + Math.random()) * name.ammoPack * couplingExtraAmmo)
+                                } else if (animateGrabRadius < 25) {
+                                    animateGrabRadius = 25
+                                }
+                                name.ammo += Math.ceil((Math.random() + Math.random()) * name.ammoPack * couplingExtraAmmo) //default ammo behavior
                             }
                         }
                     }
                 }
                 simulation.updateGunHUD();
+                powerUps.animatePowerUpGrab(`rgba(68, 102, 119, ${animateGrabRadius / 100})`, animateGrabRadius)
             }
             powerUps.Casimir.random()
         }
@@ -1569,7 +1643,7 @@ const powerUps = {
                                 document.getElementById("choose-grid").style.transitionDuration = "0s";
                                 if (m.energy >= drain) {
                                     m.energy -= drain
-                                    simulation.inGameConsole(`m.<strong class='color-f'>energy</strong> <span class='color-symbol'>-=</span> ${(100 * drain).toFixed(0)} //<em>brainstorming</em>`)
+                                    simulation.inGameConsole(`m.<strong class='energy' data-help='energy'>energy</strong> <span class='color-symbol'>-=</span> ${(100 * drain).toFixed(0)} //<em>brainstorming</em>`)
                                 }
                             }
                             if (count < 21 && simulation.isChoosing && tech.isBrainstormActive && m.energy >= drain) {
@@ -1683,7 +1757,7 @@ const powerUps = {
                     if (tech.tech[i].name === "antiscience") {
                         powerUps.ejectTech(i)
                         if (tech.isEnergyHealth) {
-                            simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-f'>energy</span> = ${(100 * m.energy).toFixed(1)} <em>//ejecting antiscience to prevent m.death()</em>`)
+                            simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='energy' data-help='energy'>energy</span> = ${(100 * m.energy).toFixed(1)} <em>//ejecting antiscience to prevent m.death()</em>`)
                         } else {
                             simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-h'>health</span> = ${(100 * m.health).toFixed(1)} <em>//ejecting antiscience to prevent m.death()</em>`)
                         }
@@ -1693,7 +1767,7 @@ const powerUps = {
             } else {
                 m.takeDamage(0.1)
                 if (tech.isEnergyHealth) {
-                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-f'>energy</span> <span class='color-symbol'>-=</span> ${(10 * Math.pow(m.defense(), 0.6)).toFixed(1)} <em>//antiscience</em>`)
+                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='energy' data-help='energy'>energy</span> <span class='color-symbol'>-=</span> ${(10 * Math.pow(m.defense(), 0.6)).toFixed(1)} <em>//antiscience</em>`)
                 } else {
                     simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-h'>health</span> <span class='color-symbol'>-=</span> ${(10 * m.defense()).toFixed(1)} <em>//antiscience</em>`)
                 }
@@ -1709,7 +1783,7 @@ const powerUps = {
                 }); //wrapping in animation frame prevents errors, probably
                 if (tech.isBarycenter) {
                     b.orbitBot(player.position, false);
-                    bullet[bullet.length - 1].endCycle = simulation.cycle + 1320 //15 seconds
+                    bullet[bullet.length - 1].endCycle = simulation.cycle + 1440 //extra time to wait for pair production to end
                 }
             } else {
                 m.energy += 2 * level.isReducedRegen;
@@ -1731,6 +1805,10 @@ const powerUps = {
         }
         if (tech.Casimir && Math.random() < tech.Casimir) {
             powerUps.spawn(x - 10, y + 1, "Casimir");
+        }
+        if (tech.isCrystalLattice && powerUps.boost.endCycle > simulation.cycle) {
+            const options = ["boost", "coupling", "Casimir"]
+            powerUps.spawn(x, y, options[Math.floor(Math.random() * options.length)]);
         }
         if (!tech.isEnergyHealth && (Math.random() * Math.random() - 0.3 > Math.sqrt(m.health)) || Math.random() < 0.04) { //spawn heal chance is higher at low health
             powerUps.spawn(x, y, "heal");
@@ -1891,7 +1969,7 @@ const powerUps = {
                 if (m.immuneCycle < m.cycle) m.takeDamage(dmg, false)
                 tech.pauseEjectTech *= 2
                 if (tech.isEnergyHealth) {
-                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-f'>energy</span> <span class='color-symbol'>-=</span> ${(100 * dmg).toFixed(1)} <em>//paradigm shift</em>`)
+                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='energy' data-help='energy'>energy</span> <span class='color-symbol'>-=</span> ${(100 * dmg).toFixed(1)} <em>//paradigm shift</em>`)
                 } else {
                     simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-h'>health</span> <span class='color-symbol'>-=</span> ${(100 * dmg).toFixed(1)} <em>//paradigm shift</em>`)
                 }
@@ -1906,7 +1984,7 @@ const powerUps = {
                 tech.tech[index].frequency = 0 //banish tech
                 powerUps.ejectTech(index)
                 if (tech.isEnergyHealth) {
-                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-f'>energy</span> = ${(100 * m.energy).toFixed(1)} <em>//ejecting paradigm shift to prevent m.death()</em>`)
+                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='energy' data-help='energy'>energy</span> = ${(100 * m.energy).toFixed(1)} <em>//ejecting paradigm shift to prevent m.death()</em>`)
                 } else {
                     simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-h'>health</span> = ${(100 * m.health).toFixed(1)} <em>//ejecting paradigm shift to prevent m.death()</em>`)
                 }
@@ -1931,10 +2009,12 @@ const powerUps = {
         }
 
         //count big power ups and small power ups
-        let options = [powerUps.healGiveMaxEnergy ? "Casimir" : "heal", "research", tech.isBoostReplaceAmmo ? "boost" : "ammo"]
-        if (m.coupling) options.push("coupling")
-        if (tech.isBoostPowerUps) options.push("boost")
-        if (tech.isCasimir) options.push("Casimir")
+
+        let options = [powerUps.healGiveMaxEnergy ? "Casimir" : "heal", "research"]
+        if (!tech.isBoostReplaceAmmo) options.push("ammo")
+        if (m.coupling || tech.isBoostReplaceAmmo) options.push("coupling")
+        if (tech.isBoostPowerUps || tech.isBoostReplaceAmmo) options.push("boost")
+        if (tech.isCasimir || tech.isBoostReplaceAmmo) options.push("Casimir")
 
         let bigIndexes = []
         let smallIndexes = []
@@ -1976,7 +2056,8 @@ const powerUps = {
     spawn(x, y, name, moving = true, size = powerUps[name].size()) {
         if ((!tech.isSuperDeterminism || (name !== 'research'))) {
             if (tech.isBoostReplaceAmmo && name === 'ammo') {
-                name = 'boost'
+                const items = ["coupling", "boost", "Casimir", "research", "heal"]
+                name = items[Math.floor(Math.random() * items.length)]
                 size = powerUps[name].size()
             }
             if (name === "heal" && powerUps.healGiveMaxEnergy) {
@@ -1990,6 +2071,10 @@ const powerUps = {
                     powerUps.directSpawn(x + 10, y + 10, "coupling", moving, size, true)
                     powerUps.directSpawn(x - 10, y - 10, "coupling", moving, size, true)
                     powerUps.directSpawn(x + 10, y - 10, "coupling", moving, size, true)
+                    powerUps.directSpawn(x, y, "coupling", moving, size, true)
+                    powerUps.directSpawn(x + 5, y + 20, "coupling", moving, size, true)
+                    powerUps.directSpawn(x, y - 20, "coupling", moving, size, true)
+                    powerUps.directSpawn(x - 20, y, "coupling", moving, size, true)
                     if (tech.isDupEnergy) {
                         m.energy *= 2
                         for (let i = 0; i < 3; i++)simulation.energyGenGraphic()

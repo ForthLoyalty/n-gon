@@ -60,6 +60,11 @@ a {
     color: #08c;
 }
 
+.music-link-unavailable {
+    color: #999;
+    cursor: default;
+}
+
 em {
     opacity: 0.7;
 }
@@ -443,6 +448,23 @@ summary {
     /* border-radius: 5px; */
 }
 
+.sideways-descriptions .card-text {
+    transform: rotate(90deg);
+    transform-origin: center;
+}
+
+.sideways-descriptions .card-background {
+    min-height: 374px;
+    margin-block: 0;
+    justify-content: center;
+}
+
+.sideways-descriptions .choose-grid-module,
+.sideways-descriptions .experiment-grid-module,
+.sideways-descriptions .pause-grid-module {
+    overflow: visible;
+}
+
 .cancel-card {
     text-align: center;
     font-size: 1.1em;
@@ -517,6 +539,10 @@ summary {
         height: 290px;
     }
 
+    .sideways-descriptions .card-background {
+        min-height: 330px;
+    }
+
     .card-text {
         min-height: 75px;
     }
@@ -544,6 +570,10 @@ summary {
 
     .card-background {
         height: 240px;
+    }
+
+    .sideways-descriptions .card-background {
+        min-height: 275px;
     }
 
     .card-text {
@@ -606,6 +636,7 @@ summary {
     height: 100%;
     background-color: var(--build-bg-color);
     z-index: 1;
+    pointer-events: none;
     opacity: 1;
     transition: opacity 0.5s ease;
 }
@@ -642,27 +673,6 @@ summary {
     background-color: #f67;
     opacity: 0;
     transition: opacity 1s;
-}
-
-#damage-bar {
-    position: absolute;
-    /* top: 1px;
-    left: 15px;
-    height: 7px;
-    width: 0px;
-    transition: width 0.3s linear; */
-    top: 16px;
-    right: 4px;
-    height: 0px;
-    width: 7px;
-    transition: height 0.25s linear;
-    opacity: 1;
-    z-index: 2;
-    pointer-events: none;
-    background-color: rgb(255, 55, 95);
-    /* border-bottom: 1.5px solid #701; */
-    /* border-right: 1.5px solid #701; */
-    display: none;
 }
 
 #defense-bar {
@@ -770,7 +780,7 @@ summary {
 #right-HUD {
     position: absolute;
     top: 15px;
-    right: 15px;
+    right: 10px;
     z-index: 2;
     font-size: 20px;
     text-align: right;
@@ -800,7 +810,7 @@ summary {
 #right-HUD-constraint {
     position: absolute;
     top: 12px;
-    right: 15px;
+    right: 10px;
     z-index: 2;
     font-size: 20px;
     text-align: right;
@@ -944,7 +954,7 @@ summary {
     padding: 3px;
 }
 
-.color-f {
+.energy {
     color: #0ad;
     letter-spacing: 1px;
 }
@@ -964,14 +974,79 @@ summary {
     letter-spacing: 1px;
 }
 
+.spore {
+    color: #067;
+    letter-spacing: 1px;
+}
+
 .color-h {
     color: #0b7;
     letter-spacing: 1px;
 }
 
-.color-e {
+.explode {
     color: #d60;
     letter-spacing: 1px;
+}
+
+[data-help] {
+    cursor: help;
+}
+
+#hover-help {
+    display: none;
+    position: fixed;
+    inset: auto;
+    box-sizing: border-box;
+    max-width: min(200px, calc(100vw - 16px));
+    margin: 0;
+    padding: 7px 10px;
+    color: #444;
+    background-color: rgb(255, 255, 255);
+    border: 1.5px solid #555;
+    border-radius: 8px;
+    box-shadow: 4px 4px 6px rgba(0, 0, 50, 0.15);
+    font: 14px/1.35 Arial, Helvetica, sans-serif;
+    pointer-events: none;
+}
+
+#hover-help:popover-open {
+    display: block;
+}
+
+#hover-help.hover-help-open {
+    display: block;
+}
+
+#hover-help[data-help-key="coupling"],
+#hover-help[data-help-key="orb-coupling"] {
+    max-width: min(330px, calc(100vw - 16px));
+}
+
+.hover-help-laser-path {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.hover-help-laser-path polyline {
+    fill: none;
+    stroke: #f02;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    opacity: 0.45;
+}
+
+.hover-help-laser-copy {
+    position: relative;
+    z-index: 1;
 }
 
 .color-m {
@@ -988,7 +1063,7 @@ summary {
     color: #356;
 }
 
-.underline {
+.expend {
     text-decoration: underline;
     text-decoration-color: #f7b;
     /* text-decoration-style: double; */
@@ -1161,7 +1236,7 @@ summary {
     padding: 0;
 }
 
-.color-block {
+.block {
     background-color: rgba(0, 0, 0, 0.1);
     border: 0.1em solid #333;
     padding: 0.5px;
@@ -1187,7 +1262,7 @@ summary {
     letter-spacing: 1px;
 }
 
-.color-flop {
+.energylop {
     text-decoration: underline;
     font-weight: 100;
     letter-spacing: -1px;
@@ -1372,7 +1447,15 @@ summary {
     display: inline-block;
     transform: skew(-27deg);
     /* font-weight: 400; */
+    color: rgb(0, 0, 0);
+    font-weight: 100;
+}
+
+.color-fire-rate {
+    display: inline-block;
+    transform: skew(-25deg);
     color: #038;
+    font-weight: 800;
 }
 
 .color-randomize {
@@ -1921,24 +2004,4 @@ summary {
     padding: 7px;
     margin-bottom: 10px;
     /* box-shadow: 4px 4px 4px hsla(240, 0%, 17%, 0.14); */
-}
-
-.tooltip {}
-
-.tooltip .tooltiptext {
-    visibility: hidden;
-    background-color: #fff;
-    border-radius: 0.3em;
-    padding: 0.2em 0.3em;
-    border: solid #000 1px;
-
-    position: relative;
-    z-index: 1;
-    bottom: 100%;
-    left: 0%;
-    margin-left: -50%;
-}
-
-.tooltip:hover .tooltiptext {
-    visibility: visible;
 }

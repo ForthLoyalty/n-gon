@@ -1,5 +1,6 @@
 //global player variables for use in matter.js physics
 let player, jumpSensor, playerBody, playerHead, headSensor;
+let lastTouchedBlock = null;
 
 // player Object Prototype *********************************************
 const m = {
@@ -321,6 +322,7 @@ const m = {
         });
         const who = body[body.length - 1]
         Composite.add(engine.world, who); //add to world
+        lastTouchedBlock = who
         m.throwCharge = 4;
         m.holdingTarget = who
         m.isHolding = true;
@@ -468,7 +470,7 @@ const m = {
             // m.addHealth(1)
             for (let i = 0; i < tech.tech.length; i++) {
                 if (tech.tech[i].name === "eigenstate") {
-                    powerUps.ejectTech(i)
+                    powerUps.ejectTech(i, true)
                     break
                 }
             }
@@ -527,7 +529,6 @@ const m = {
             m.health = 0;
             simulation.ephemera = []
             document.getElementById("defense-bar").style.display = "none"; //hide defense
-            document.getElementById("damage-bar").style.display = "none"
             m.displayHealth();
             document.getElementById("text-log").style.display = "none"
             document.getElementById("fade-out").style.opacity = 0.9; //slowly fade to 90% white on top of canvas
@@ -598,9 +599,12 @@ const m = {
     },
     addHealth(heal) {
         if (!tech.isEnergyHealth) {
-            m.health += heal * simulation.healScale * (level.isLowHeal ? 0.5 : 1);
-            if (m.health > m.maxHealth) m.health = m.maxHealth;
+            heal *= simulation.healScale * (level.isLowHeal ? 0.5 : 1);
+            heal = Math.min(heal, m.maxHealth - m.health)
+            m.health += heal
+            // if (m.health > m.maxHealth) m.health = m.maxHealth;
             m.displayHealth();
+            simulation.dmgNumbers({ x: m.pos.x, y: m.pos.y - 13 }, Math.ceil(100 * heal).toFixed(0), "rgba(0, 238, 187,", 60, true)
         }
     },
     baseHealth: 1,
@@ -615,7 +619,7 @@ const m = {
         document.getElementById("health-bg").style.width = `${Math.floor(300 * m.maxHealth)}px`
         document.getElementById("defense-bar").style.width = Math.max(0, Math.floor(300 * m.maxHealth * (1 - m.defense()))) + "px";
 
-        if (isMessage) simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-h'>maxHealth</span> <span class='color-symbol'>=</span> ${m.maxHealth.toFixed(2)}`)
+        if (isMessage) simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-h' data-help='health'>maxHealth</span> <span class='color-symbol'>=</span> ${m.maxHealth.toFixed(2)}`)
         if (m.health > m.maxHealth) m.health = m.maxHealth;
         m.displayHealth();
     },
@@ -807,6 +811,7 @@ const m = {
                 dmg = Math.min(dmg, 0.49 * m.maxHealth)
             }
             m.energy -= dmg //scale damage with heal reduction difficulty
+            simulation.dmgNumbers({ x: m.pos.x, y: m.pos.y - 13 }, Math.ceil(100 * dmg).toFixed(0), "rgba(0, 255, 255,", 1000 * Math.max(Math.min(0.07, dmg), 0.03), true)
 
             if (tech.isEnergyNoAmmo && m.energy < 0.33) {
                 for (let i = 0; i < tech.tech.length; i++) {
@@ -830,7 +835,7 @@ const m = {
 
                     tech.isDeathAvoidedThisLevel = true
                     powerUps.research.changeRerolls(-1)
-                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-r'>research</span><span class='color-symbol'>--</span><br>${powerUps.research.count}`)
+                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-r' data-help='research'>research</span><span class='color-symbol'>--</span><br>${powerUps.research.count}`)
                     powerUps.spawnDelay("heal", 16, 8);//(type, count, delay = 2, location = m.pos) {
                     m.energy = m.maxEnergy + 0.1
                     if (m.immuneCycle < m.cycle + 300) m.immuneCycle = m.cycle + 300 //disable this.immuneCycle bonus seconds
@@ -857,6 +862,8 @@ const m = {
                 dmg = Math.min(dmg, 0.4 * m.maxHealth)
             }
             m.health -= dmg;
+            simulation.dmgNumbers({ x: m.pos.x, y: m.pos.y - 13 }, Math.ceil(100 * dmg).toFixed(0), "rgba(255, 255, 255,", 1000 * Math.max(Math.min(0.07, dmg), 0.03), true)
+
 
             if (tech.isEnergyNoAmmo && m.health < 0.33) {
                 for (let i = 0; i < tech.tech.length; i++) {
@@ -880,15 +887,15 @@ const m = {
                     m.health = 0.01
                     tech.isDeathAvoidedThisLevel = true
                     powerUps.research.changeRerolls(-1)
-                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-r'>research</span><span class='color-symbol'>--</span><br>${powerUps.research.count}`)
+                    simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-r' data-help='research'>research</span><span class='color-symbol'>--</span><br>${powerUps.research.count}`)
                     setTimeout(function () {
-                        powerUps.spawnDelay("heal", 16, 8);//(type, count, delay = 2, location = m.pos) {
+                        powerUps.spawnDelay("heal", 16, 16);//(type, count, delay = 2, location = m.pos) {
                     }, 800);
                     simulation.ephemera.push({
                         levelsCleared: level.levelsCleared,
                         do() {
                             m.timeStop(Math.random() < 0.1 ? "#00cccc55" : "#ccc")
-                            if (m.health > 0.9 || this.levelsCleared !== level.levelsCleared) {
+                            if (m.health > Math.min(0.7 * m.maxHealth, 0.7) || this.levelsCleared !== level.levelsCleared) {
                                 m.wakeCheck(false); //unpause time
                                 simulation.removeEphemera(this);
                                 simulation.wipe = function () { //set wipe to normal
@@ -1029,8 +1036,11 @@ const m = {
     },
     draw() { },
     isAltSkin: false,
-    drawBoost() { },
     resetSkin() {
+        if (m.skin.isPolarDefense) {
+            m.damageReduction /= 0.4
+            m.skin.isPolarDefense = false
+        }
         simulation.isAutoZoom = true;
         m.hardLandCDScale = 1
         m.yOffWhen.jump = 70
@@ -1296,7 +1306,7 @@ const m = {
                         m.buttonCD_jump = m.cycle; //can't jump again until 20 cycles pass
                         player.force.y = -1.1 * m.jumpForce; //player jump force
                         //if head is clear don't do xForce
-                        if (Matter.Query.ray(map, { x: m.pos.x - sensorWidth, y: m.pos.y - 25 }, { x: m.pos.x + sensorWidth, y: m.pos.y - 25 }).length) {
+                        if (Matter.Query.rayAny(map, { x: m.pos.x - sensorWidth, y: m.pos.y - 25 }, { x: m.pos.x + sensorWidth, y: m.pos.y - 25 })) {
                             player.force.x = xForce * m.jumpForce; //player jump force
                         }
                         Matter.Body.setVelocity(player, { x: 0, y: 0 });//zero player y-velocity for consistent jumps
@@ -1322,7 +1332,7 @@ const m = {
                     player.velocity.y > -10 &&
                     m.cycle > m.lastOnGroundCycle + 10 &&
                     m.buttonCD_jump + 20 < m.cycle &&
-                    Matter.Query.ray(map, { x: m.pos.x - sensorWidth, y: m.pos.y + 50 }, { x: m.pos.x - sensorWidth, y: m.pos.y + 95 }).length
+                    Matter.Query.rayAny(map, { x: m.pos.x - sensorWidth, y: m.pos.y + 50 }, { x: m.pos.x - sensorWidth, y: m.pos.y + 95 })
                 ) {
                     m.ledgeCoyote = -20
                     Matter.Body.setVelocity(player, {
@@ -1337,7 +1347,7 @@ const m = {
                     player.velocity.y > -10 &&
                     m.cycle > m.lastOnGroundCycle + 10 &&
                     m.buttonCD_jump + 20 < m.cycle &&
-                    Matter.Query.ray(map, { x: m.pos.x + sensorWidth, y: m.pos.y + 50 }, { x: m.pos.x + sensorWidth, y: m.pos.y + 95 }).length
+                    Matter.Query.rayAny(map, { x: m.pos.x + sensorWidth, y: m.pos.y + 50 }, { x: m.pos.x + sensorWidth, y: m.pos.y + 95 })
                 ) {
                     m.ledgeCoyote = 20
                     Matter.Body.setVelocity(player, { x: 0, y: 0.65 * player.velocity.y });
@@ -1399,7 +1409,7 @@ const m = {
                 }
 
                 if (tech.isGrabEnergy && m.ledgeCoyote !== 0) {
-                    m.energy += 0.0051 * level.isReducedRegen * tech.isGrabEnergy
+                    m.energy += 0.0068 * level.isReducedRegen * tech.isGrabEnergy
                     if (!(simulation.cycle % 12)) simulation.energyGenGraphic()
                 }
             }
@@ -1471,6 +1481,18 @@ const m = {
                 ctx.restore();
             }
         },
+        isPolarDefense: false,
+        updatePolarDefense() {
+            const isActive = !!(tech.isHyperpolarisation && tech.isDamageCooldown && m.lastKillCycle + tech.isDamageCooldownTime > m.cycle)
+            if (isActive !== m.skin.isPolarDefense) {
+                if (isActive) {
+                    m.damageReduction *= 0.4
+                } else {
+                    m.damageReduction /= 0.4
+                }
+                m.skin.isPolarDefense = isActive
+            }
+        },
         polar() {
             m.isAltSkin = true
             // m.setFillColors();
@@ -1483,6 +1505,7 @@ const m = {
             m.bodyGradient = grd
 
             m.draw = function () {
+                m.skin.updatePolarDefense()
                 ctx.fillStyle = m.fillColor;
                 m.walk_cycle += m.flipLegs * m.Vx;
                 ctx.save();
@@ -1614,14 +1637,17 @@ const m = {
             Matter.Body.scale(player, 2 / player.scale, 2 / player.scale); //undoes old scale and set new scale to be 2
             Matter.Body.setMass(player, mass);
             Matter.Body.setInertia(player, Infinity);
-            player.scale = 2
-            m.isDown = false
-
             //different scales can sometimes have trouble with jumps so it's a bit faster and higher jumping
             m.squirrelJump = 1.05;
             m.squirrelFx = 1.05;
-            m.setMovement()
+            m.isDown = false
 
+            player.scale = 2
+            m.setMovement()
+            if (m.fieldMode !== 3) {
+                m.holdingMassScale = 0.01
+                if (m.isHolding) m.definePlayerMass(m.defaultMass + m.holdingTarget.mass * m.holdingMassScale)
+            }
             m.damageDone *= 3
             // m.damageReduction *= 0.7
 
@@ -1640,6 +1666,10 @@ const m = {
                         Matter.Body.scale(player, player.scale * player.scale, player.scale * player.scale);
                         Matter.Body.setMass(player, mass);
                         Matter.Body.setInertia(player, Infinity);
+                        if (m.fieldMode !== 3) {
+                            m.holdingMassScale = 0.5
+                            if (m.isHolding) m.definePlayerMass(m.defaultMass + m.holdingTarget.mass * m.holdingMassScale)
+                        }
 
                         m.damageReduction *= 0.7
                         m.damageDone /= 3
@@ -1653,6 +1683,10 @@ const m = {
                                 Matter.Body.scale(player, player.scale * player.scale, player.scale * player.scale);
                                 Matter.Body.setMass(player, mass);
                                 Matter.Body.setInertia(player, Infinity);
+                                if (m.fieldMode !== 3) {
+                                    m.holdingMassScale = 0.01
+                                    if (m.isHolding) m.definePlayerMass(m.defaultMass + m.holdingTarget.mass * m.holdingMassScale)
+                                }
 
                                 m.damageReduction /= 0.7
                                 m.damageDone *= 3
@@ -1938,13 +1972,14 @@ const m = {
                 ctx.save();
                 ctx.globalAlpha = (m.immuneCycle < m.cycle) ? 1 : m.cycle % 3 ? 0.1 : 0.65 + 0.1 * Math.random()
                 ctx.translate(m.pos.x, m.pos.y);
+                if (input.fire) ctx.translate((simulation.cycle % 2) * 8, 0);
                 m.calcLeg(Math.PI, -1.25);
                 m.drawLeg("#606080");
                 m.calcLeg(0, 0);
                 m.drawLeg("#446");
 
-                if (m.coyoteCycles > 30 && !m.onGround && !(m.cycle % 2) && (m.lastOnGroundCycle + m.coyoteCycles - m.cycle) > 0) {
-                    b.isoWave360Solo({ x: m.pos.x, y: m.pos.y + 145 }, 120 * Math.sqrt(tech.bulletsLastLonger), tech.waveBeamSpeed)
+                if (m.coyoteCycles > 30 && !m.onGround && !(m.cycle % 6) && (m.lastOnGroundCycle + m.coyoteCycles - m.cycle) > 0) {
+                    b.isoWave360Solo({ x: m.pos.x, y: m.pos.y + 145 }, 11 * Math.sqrt(tech.bulletsLastLonger))
                 }
 
 
@@ -2101,6 +2136,10 @@ const m = {
                             })
                             simulation.translatePlayerAndCamera({ x: m.eigen.block.position.x, y: m.eigen.block.position.y - 30 })
 
+                            const v = {
+                                x: player.velocity.x,
+                                y: player.velocity.y
+                            }
                             Matter.Body.setVelocity(player, m.eigen.block.velocity);
                             m.health = m.eigen.health[m.eigen.state]
                             if (m.health > m.maxHealth) m.health = m.maxHealth
@@ -2122,6 +2161,7 @@ const m = {
                             } else {
                                 if (m.holdingTarget) m.drop();
                                 m.eigen.makeBlock()
+                                Matter.Body.setVelocity(m.eigen.block, v);
                             }
                             break
                         } else {
@@ -2179,12 +2219,10 @@ const m = {
 
                         //fire 360 wave from eigen block
                         if (tech.isNormalMode && m.eigen.count > 0) {
-                            if (!(simulation.cycle % 45)) {
-                                b.isoWave360Solo(m.eigen.block.position, 500 * Math.sqrt(tech.bulletsLastLonger))
-                                b.isoWave360Solo(m.pos, 500 * Math.sqrt(tech.bulletsLastLonger))
+                            if (!(simulation.cycle % 60)) {
+                                b.isoWave360Solo(m.eigen.block.position, 48 * Math.sqrt(tech.bulletsLastLonger))
+                                b.isoWave360Solo(m.pos, 48 * Math.sqrt(tech.bulletsLastLonger))
                             }
-                            // else if (!((20 + simulation.cycle) % 40)) {
-                            // }
                         }
                     }
                 },
@@ -2222,7 +2260,8 @@ const m = {
                     m.eigen.drawLeg("#000");
 
                     //check if close to other state
-                    if (Vector.magnitude(Vector.sub(m.pos, m.eigen.block.position)) < 900) {
+                    const range = 900
+                    if (Vector.magnitude(Vector.sub(m.pos, m.eigen.block.position)) < range) {
                         if (m.eigen.count < 61) m.eigen.count += 2
                     } else {
                         m.eigen.count--
@@ -2236,7 +2275,7 @@ const m = {
                         const nodes = 2 + maxNodes - Math.floor(t / Math.PI) % maxNodes
                         // if(!(m.cycle % 60))
                         // const nodes = Math.floor(3 + 4 * Math.random())
-                        const amplitude = (nodes === 1 ? 0 : 5 * Math.sin(t))
+                        const amplitude = (nodes === 1 ? 0 : 6 * Math.sin(t))
                         if (localSettings.isHideHUD) {
                             ctx.beginPath();
                             ctx.arc(0, 0, 40 * player.scale, 0, 2 * Math.PI);
@@ -2244,7 +2283,7 @@ const m = {
                             ctx.lineWidth = 10
                             ctx.stroke();
                         } else {
-                            this.drawSine(36 * m.eigen.count / 62, amplitude, nodes, `rgb(70,70,70)`);
+                            this.drawSine(36 * m.eigen.count / 62, amplitude, nodes);
                         }
                     }
 
@@ -2266,6 +2305,13 @@ const m = {
                     ctx.restore();
                     m.yOff = m.yOff * 0.85 + m.yOffGoal * 0.15; //smoothly move leg height towards height goal
                     powerUps.boost.draw()
+                    // if (tech.isEntanglement && !m.isHolding && input.down && input.field) {
+                    //     //cap velocity
+                    //     const unit = Vector.normalise(Vector.sub(m.pos, m.eigen.block.position))
+                    //     Matter.Body.setVelocity(m.eigen.block, Vector.mult(unit, 20));
+                    //     m.holdingTarget = m.eigen.block
+                    //     m.pickUp();
+                    // }
                 },
                 drawLeg(stroke) {
                     // if (simulation.mouseInGame.x > m.pos.x) {
@@ -2314,7 +2360,7 @@ const m = {
                     ctx.stroke();
                     ctx.restore();
                 },
-                drawSine(radius, amplitude, cycles, color) {
+                drawSine(radius, amplitude, cycles) {
                     // if (cycles < 3) radius *= 0.5
                     // console.log(amplitude, cycles)
                     const segments = cycles * 2; // One segment per half-cycle (peak to trough)
@@ -2357,18 +2403,18 @@ const m = {
                         }
                     }
                     // ctx.arc(0, 0, 30, 0, 2 * Math.PI);
-                    ctx.fillStyle = color
+                    ctx.fillStyle = `rgba(255,50,140,1)`// `rgb(70,70,70)`//`rgba(255,50,140,0.3)`
                     ctx.fill();
-                    // ctx.strokeStyle = "#f03"
-                    // ctx.lineWidth = 1
-                    // ctx.stroke();
+                    ctx.strokeStyle = "#000"//`rgba(255,50,140,1)`//
+                    ctx.lineWidth = 1.5
+                    ctx.stroke();
 
                     ctx.rotate(-m.cycle * 0.001)
                 },
                 keyLog: [null, null, null],
                 keyLogCycle: [0, 0, 0],
                 keyListener(event) {
-                    if (event.repeat) return; //prevent holding button down
+                    if (event.repeat || simulation.paused) return; //prevent holding button down
 
                     const sub = m.cycle - m.eigen.keyLogCycle[m.eigen.keyLogCycle.length - 1]
                     // console.log(sub, m.eigen.keyLogCycle)
@@ -3462,10 +3508,6 @@ const m = {
         m.fieldThreshold = Math.cos((m.fieldArc) * Math.PI)
     },
     setHoldDefaults() {
-        // if (tech.isFreeWormHole && m.fieldMode !== 9) { //not wormhole
-        //     const removed = tech.removeTech("charmed baryon") //neutronum can get player stuck so it has to be removed if player has wrong field
-        //     if (removed) powerUps.directSpawn(m.pos.x, m.pos.y, "tech");
-        // }
         if (tech.isNeutronium && m.fieldMode !== 3) { //not negative mass field
             const removed = tech.removeTech("neutronium") //neutronum can get player stuck so it has to be removed if player has wrong field
             if (removed) powerUps.directSpawn(m.pos.x, m.pos.y, "tech");
@@ -3511,7 +3553,7 @@ const m = {
         m.maxEnergy = (tech.isMaxEnergyTech ? 0.5 : 1) + tech.bonusEnergy + tech.healMaxEnergyBonus + tech.harmonicEnergy + 3 * tech.isGroundState + 1.5 * (m.fieldMode === 1) + (m.fieldMode === 0) * 0.01 * m.coupling + (m.fieldMode === 1) * 0.05 * m.coupling + tech.isStandingWaveExpand
         m.maxEnergy *= m.fieldUpgrades[1].energyHealthRatio / tech.inverseFireRate
         if (level.isReducedEnergy) m.maxEnergy *= 0.5
-        if (isMessage) simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-f'>maxEnergy</span> <span class='color-symbol'>=</span> ${(m.maxEnergy.toFixed(2))}`)
+        if (isMessage) simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='energy' data-help='energy'>maxEnergy</span> <span class='color-symbol'>=</span> ${(m.maxEnergy.toFixed(2))}`)
     },
     fieldMeterColor: "#0cf",
     drawRegenEnergy(bgColor = "rgba(0, 0, 0, 0.4)", range = 60) {
@@ -3692,6 +3734,17 @@ const m = {
         if (m.holdingTarget) {
             m.energy -= m.fieldRegen;
             if (m.energy < 0) m.energy = 0;
+            // The block was drawn before holding moves it; retain that pose for the charge overlay.
+            const vertices = m.holdingTarget.vertices;
+            let chargeVertices = m.holdingTarget.throwChargeVertices;
+            if (!chargeVertices || chargeVertices.length !== vertices.length) {
+                chargeVertices = m.holdingTarget.throwChargeVertices = vertices.map(v => ({ x: v.x, y: v.y }));
+            } else {
+                for (let i = 0; i < vertices.length; i++) {
+                    chargeVertices[i].x = vertices[i].x;
+                    chargeVertices[i].y = vertices[i].y;
+                }
+            }
             const r = 30 + 40 * player.scale
             Matter.Body.setPosition(m.holdingTarget, { x: m.pos.x + r * Math.cos(m.angle), y: m.pos.y + r * Math.sin(m.angle) });
             Matter.Body.setVelocity(m.holdingTarget, player.velocity);
@@ -3790,19 +3843,20 @@ const m = {
                         //draw charge            
                         const x = m.pos.x + eye * Math.cos(m.angle);
                         const y = m.pos.y + eye * Math.sin(m.angle);
-                        const len = m.holdingTarget.vertices.length - 1;
+                        const vertices = m.holdingTarget.throwChargeVertices || m.holdingTarget.vertices;
+                        const len = vertices.length - 1;
                         const opacity = m.throwCharge > 4 ? 0.65 : m.throwCharge * 0.06
                         ctx.fillStyle = `rgba(255,0,255,${opacity})`;
                         ctx.beginPath();
                         ctx.moveTo(x, y);
-                        ctx.lineTo(m.holdingTarget.vertices[len].x, m.holdingTarget.vertices[len].y);
-                        ctx.lineTo(m.holdingTarget.vertices[0].x, m.holdingTarget.vertices[0].y);
+                        ctx.lineTo(vertices[len].x, vertices[len].y);
+                        ctx.lineTo(vertices[0].x, vertices[0].y);
                         ctx.fill();
                         for (let i = 0; i < len; i++) {
                             ctx.beginPath();
                             ctx.moveTo(x, y);
-                            ctx.lineTo(m.holdingTarget.vertices[i].x, m.holdingTarget.vertices[i].y);
-                            ctx.lineTo(m.holdingTarget.vertices[i + 1].x, m.holdingTarget.vertices[i + 1].y);
+                            ctx.lineTo(vertices[i].x, vertices[i].y);
+                            ctx.lineTo(vertices[i + 1].x, vertices[i + 1].y);
                             ctx.fill();
                         }
                         if (tech.isTokamakFly && m.throwCharge > 4 && m.energy > 0.01) {
@@ -3879,24 +3933,27 @@ const m = {
                         //draw charge
                         const x = m.pos.x + eye * Math.cos(m.angle);
                         const y = m.pos.y + eye * Math.sin(m.angle);
-                        const len = m.holdingTarget.vertices.length - 1;
-                        const edge = m.throwCharge * m.throwCharge * m.throwCharge;
-                        const grd = ctx.createRadialGradient(x, y, edge, x, y, edge + 5);
-                        grd.addColorStop(0, "rgba(255,50,150,0.3)");
-                        grd.addColorStop(1, "transparent");
-                        ctx.fillStyle = grd;
+                        const vertices = m.holdingTarget.throwChargeVertices || m.holdingTarget.vertices;
+                        const len = vertices.length - 1;
+                        // Reveal the throw-charge shape inside an expanding circle.
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.arc(x, y, m.throwCharge * m.throwCharge * m.throwCharge, 0, 2 * Math.PI);
+                        ctx.clip();
+                        ctx.fillStyle = "rgba(255,50,150,0.3)";
                         ctx.beginPath();
                         ctx.moveTo(x, y);
-                        ctx.lineTo(m.holdingTarget.vertices[len].x, m.holdingTarget.vertices[len].y);
-                        ctx.lineTo(m.holdingTarget.vertices[0].x, m.holdingTarget.vertices[0].y);
+                        ctx.lineTo(vertices[len].x, vertices[len].y);
+                        ctx.lineTo(vertices[0].x, vertices[0].y);
                         ctx.fill();
                         for (let i = 0; i < len; i++) {
                             ctx.beginPath();
                             ctx.moveTo(x, y);
-                            ctx.lineTo(m.holdingTarget.vertices[i].x, m.holdingTarget.vertices[i].y);
-                            ctx.lineTo(m.holdingTarget.vertices[i + 1].x, m.holdingTarget.vertices[i + 1].y);
+                            ctx.lineTo(vertices[i].x, vertices[i].y);
+                            ctx.lineTo(vertices[i + 1].x, vertices[i + 1].y);
                             ctx.fill();
                         }
+                        ctx.restore();
                         //trajectory prediction
                         const cycles = 30
                         const charge = Math.min(m.throwCharge / 5, 1)
@@ -3919,10 +3976,112 @@ const m = {
                 //throw the body
                 m.fieldCDcycle = m.cycle + 20;
                 m.fireCDcycle = m.cycle + 20;
-
                 m.isHolding = false;
 
-                if (tech.isTokamak && m.throwCharge > 4 && !m.holdingTarget.isInvulnerable) { //remove the block body and pulse  in the direction you are facing
+                if (tech.isEntanglement && m.eigen.block && m.holdingTarget === m.eigen.block && m.throwCharge > 4) {
+                    simulation.ephemera.push({
+                        count: 300, //cycles before it self removes
+                        target: null,
+                        endCheck() {
+                            this.count--
+                            if (this.count < 0 || !m.eigen.block) {
+                                simulation.removeEphemera(this)
+                                this.do = () => { }
+
+                                // simulation.ephemera.push({
+                                //     count: 30, //cycles before it self removes
+                                //     where: { x: m.eigen.block.position.x, y: m.eigen.block.position.y },
+                                //     do() {
+
+                                //         b.isoWave360Solo(this.where, 250 * Math.sqrt(tech.bulletsLastLonger), 30)//where, end = 500 * Math.sqrt(tech.bulletsLastLonger), speed = 1.6 * tech.waveBeamSpeed, cd = 0
+
+                                //         this.count--
+                                //         if (this.count < 0) {
+                                //             simulation.removeEphemera(this)
+                                //         }
+                                //     },
+                                // })
+                            }
+                        },
+                        do() {
+                            this.endCheck()
+                            //find someone to lock onto
+                            let closeDist = Infinity;
+                            const futurePos = Vector.add(m.eigen.block.position, Vector.mult(m.eigen.block.velocity, 50)) //look for closest target to where the missile will be in 30 cycles
+                            for (let i = 0, len = mob.length; i < len; ++i) {
+                                if (
+                                    mob[i].alive && !mob[i].isBadTarget &&
+                                    !Matter.Query.rayAny(map, m.eigen.block.position, mob[i].position) &&
+                                    !mob[i].isInvulnerable
+                                ) {
+                                    const futureDist = Vector.magnitude(Vector.sub(futurePos, mob[i].position));
+                                    if (futureDist < closeDist) {
+                                        closeDist = futureDist;
+                                        this.target = mob[i];
+                                        this.do = this.lockedDo
+                                    }
+                                }
+                            }
+                        },
+                        lockedDo() {
+                            this.endCheck()
+                            if (Matter.Query.collides(m.eigen.block, [this.target]).length || !this.target.alive) {
+                                this.count = 0;
+                                simulation.ephemera.push({
+                                    count: 5, //cycles before it self removes
+                                    do() {
+                                        this.count--
+                                        if (this.count < 0) {
+                                            simulation.removeEphemera(this)
+                                        }
+                                        for (let i = 0, len = 8; i < len; i++) {
+                                            let where = Vector.add(m.eigen.block.position, Vector.mult(m.eigen.block.velocity, 6 * i / len))
+                                            b.isoWave360Solo(where, 24 * Math.sqrt(tech.bulletsLastLonger))//where, end = 500 * Math.sqrt(tech.bulletsLastLonger), speed = 1.6 * tech.waveBeamSpeed, cd = 0
+                                        }
+                                    },
+                                })
+
+                            }
+
+                            const futureDist = Vector.magnitude(Vector.sub(m.eigen.block.position, this.target.position));
+                            if (futureDist < 500) {
+                                for (let i = 0, len = 6; i < len; i++) {
+                                    let where = Vector.add(m.eigen.block.position, Vector.mult(m.eigen.block.velocity, 6 * i / len))
+                                    b.isoWave360Solo(where, 24 * Math.sqrt(tech.bulletsLastLonger))//where, end = 500 * Math.sqrt(tech.bulletsLastLonger), speed = 1.6 * tech.waveBeamSpeed, cd = 0
+                                }
+                            }
+
+                            const THRUST = 0.005 + 0.0006 * m.eigen.block.speed
+                            m.eigen.block.force = Vector.mult(Vector.normalise(Vector.sub(m.eigen.block.position, this.target.position)), -m.eigen.block.mass * THRUST)
+                            m.eigen.block.force.y -= simulation.g * m.eigen.block.mass
+                            Matter.Body.setVelocity(m.eigen.block, Vector.mult(m.eigen.block.velocity, 0.94 - 0.002 * m.eigen.block.speed));
+
+                            ctx.save();
+                            ctx.translate(m.eigen.block.position.x, m.eigen.block.position.y);
+                            m.velocitySmooth = Vector.add(Vector.mult(m.velocitySmooth, 0.8), Vector.mult(m.eigen.block.velocity, 0.2))
+                            ctx.rotate(Math.atan2(m.velocitySmooth.y, m.velocitySmooth.x))
+                            ctx.beginPath();
+                            const radius = 40
+                            const mag = 8 * Vector.magnitude(m.velocitySmooth) + radius
+                            ctx.arc(0, 0, radius, -Math.PI / 2, Math.PI / 2);
+                            ctx.bezierCurveTo(-radius, radius, -radius, 0, -mag, 0); // bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y)
+                            ctx.bezierCurveTo(-radius, 0, -radius, -radius, 0, -radius);
+                            ctx.fillStyle = "#888888a5"
+                            ctx.fill()
+                            // ctx.strokeStyle = "#999"
+                            // ctx.lineWidth = 3
+                            // ctx.stroke();
+                            ctx.restore();
+                        }
+                    })
+
+
+
+
+
+                }
+
+                if (tech.isTokamak && m.throwCharge > 4 && !m.holdingTarget.isInvulnerable && !m.holdingTarget.isImmutable) { //remove the block body and pulse  in the direction you are facing
                     //m.throwCharge > 5 seems to be when the field full colors in a block you are holding
                     m.throwCycle = m.cycle + 180 //used to detect if a block was thrown in the last 3 seconds
                     if (m.immuneCycle < m.cycle) {
@@ -3961,7 +4120,7 @@ const m = {
                         for (let i = body.length - 1; i > 0; i--) {
                             if (body[i] && body[i] !== m.holdingTarget) {
                                 const dist2 = Vector.magnitudeSquared(Vector.sub(m.pos, body[i].position))
-                                if (dist2 < range && !body[i].isInvulnerable && !body[i].isNotHoldable) {
+                                if (dist2 < range && !body[i].isInvulnerable && !body[i].isNotHoldable && !body[i].isImmutable) {
                                     const where = { x: body[i].position.x, y: body[i].position.y }
                                     const dmg = 60 * Math.pow(body[i].mass, 0.25)
                                     Matter.Composite.remove(engine.world, body[i]);
@@ -3976,7 +4135,7 @@ const m = {
                     //bullet-like collisions
                     m.holdingTarget.collisionFilter.category = cat.bullet
                     m.holdingTarget.collisionFilter.mask = cat.map | cat.body | cat.bullet | cat.mob | cat.mobBullet | cat.mobShield;
-                    if (tech.isBlockRestitution) {
+                    if (tech.isBlockRestitution && !m.holdingTarget.isImmutable) {
                         m.holdingTarget.restitution = 0.999 //extra bouncy
                         m.holdingTarget.friction = m.holdingTarget.frictionStatic = m.holdingTarget.frictionAir = 0.001
                     }
@@ -4001,7 +4160,7 @@ const m = {
 
                     if (Matter.Query.collides(m.holdingTarget, map).length !== 0) {
                         speed *= 0.7 //drop speed by 30% if touching map
-                        if (Matter.Query.ray(map, m.holdingTarget.position, m.pos).length !== 0) speed = 0 //drop to zero if the center of the block can't see the center of the player through the map
+                        if (Matter.Query.rayAny(map, m.holdingTarget.position, m.pos)) speed = 0 //drop to zero if the center of the block can't see the center of the player through the map
                     }
                     m.throwCharge = 0;
                     m.throwCycle = m.cycle + 180 //used to detect if a block was thrown in the last 3 seconds
@@ -4015,10 +4174,10 @@ const m = {
                     });
                     m.definePlayerMass() //return to normal player mass
 
-                    if (tech.isStaticBlock) m.holdingTarget.isStatic = true
-                    if (tech.isAddBlockMass && !m.holdingTarget.isInvulnerable) {
+                    if (tech.isStaticBlock && !m.holdingTarget.isImmutable) m.holdingTarget.isStatic = true
+                    if (tech.isAddBlockMass && !m.holdingTarget.isInvulnerable && !m.holdingTarget.isImmutable) {
                         const expand = function (that, massLimit) {
-                            if (that.mass < massLimit) {
+                            if (!that.isImmutable && that.mass < massLimit) {
                                 const scale = 1.04;
                                 Matter.Body.scale(that, scale, scale);
                                 setTimeout(expand, 20, that, massLimit);
@@ -4106,7 +4265,7 @@ const m = {
                 //bullet-like collisions
                 m.holdingTarget.collisionFilter.category = cat.bullet
                 m.holdingTarget.collisionFilter.mask = cat.map | cat.body | cat.bullet | cat.mob | cat.mobBullet | cat.mobShield;
-                if (tech.isBlockRestitution) {
+                if (tech.isBlockRestitution && !m.holdingTarget.isImmutable) {
                     m.holdingTarget.restitution = 0.999 //extra bouncy
                     m.holdingTarget.friction = m.holdingTarget.frictionStatic = m.holdingTarget.frictionAir = 0.001
                 }
@@ -4142,9 +4301,9 @@ const m = {
                 });
                 m.definePlayerMass() //return to normal player mass
 
-                if (tech.isAddBlockMass && !m.holdingTarget.isInvulnerable) {
+                if (tech.isAddBlockMass && !m.holdingTarget.isInvulnerable && !m.holdingTarget.isImmutable) {
                     const expand = function (that, massLimit) {
-                        if (that.mass < massLimit) {
+                        if (!that.isImmutable && that.mass < massLimit) {
                             const scale = 1.04;
                             Matter.Body.scale(that, scale, scale);
                             setTimeout(expand, 20, that, massLimit);
@@ -4203,7 +4362,7 @@ const m = {
             if (
                 dist2 < m.grabPowerUpRange2 &&
                 (m.lookingAt(powerUp[i]) || dist2 < 10000) &&
-                Matter.Query.ray(map, powerUp[i].position, m.pos).length === 0
+                !Matter.Query.rayAny(map, powerUp[i].position, m.pos)
             ) {
                 if (!tech.isHealAttract || powerUp[i].name !== "heal") { //if you have accretion heals are already pulled in a different way
                     powerUp[i].force.x += 0.04 * (dxP / Math.sqrt(dist2)) * powerUp[i].mass;
@@ -4245,7 +4404,7 @@ const m = {
             const dyP = m.pos.y - powerUp[i].position.y;
             const dist2 = dxP * dxP + dyP * dyP + 10;
             // float towards player
-            if (dist2 < m.grabPowerUpRange2 && Matter.Query.ray(map, powerUp[i].position, m.pos).length === 0) {
+            if (dist2 < m.grabPowerUpRange2 && !Matter.Query.rayAny(map, powerUp[i].position, m.pos)) {
                 if (!tech.isHealAttract || powerUp[i].name !== "heal") { //if you have accretion heals are already pulled in a different way
                     powerUp[i].force.x += 0.05 * (dxP / Math.sqrt(dist2)) * powerUp[i].mass;
                     powerUp[i].force.y += 0.05 * (dyP / Math.sqrt(dist2)) * powerUp[i].mass - powerUp[i].mass * simulation.g; //negate gravity
@@ -4410,7 +4569,7 @@ const m = {
                 Vector.magnitude(Vector.sub(mob[i].position, m.pos)) - mob[i].radius < m.fieldRange &&
                 m.lookingAt(mob[i]) &&
                 !mob[i].isUnblockable &&
-                Matter.Query.ray(map, mob[i].position, m.pos).length === 0
+                !Matter.Query.rayAny(map, mob[i].position, m.pos)
             ) {
                 mob[i].locatePlayer();
                 m.pushMass(mob[i]);
@@ -4430,7 +4589,7 @@ const m = {
             // lookingAt: false //false to pick up object in range, but not looking at
         };
         for (let i = 0, len = body.length; i < len; ++i) {
-            if (Matter.Query.ray(map, body[i].position, m.pos).length === 0) {
+            if (!Matter.Query.rayAny(map, body[i].position, m.pos)) {
                 //is m next body a better target then my current best
                 const dist = Vector.magnitude(Vector.sub(body[i].position, m.pos));
                 const looking = m.lookingAt(body[i]);
@@ -4465,6 +4624,7 @@ const m = {
     pickUp() {
         //triggers when a hold target exits and field button is released
         m.isHolding = true;
+        if (!m.holdingTarget.isNotHoldable && !m.holdingTarget.isInvulnerable) lastTouchedBlock = m.holdingTarget
         //conserve momentum when player mass changes
         totalMomentum = Vector.add(Vector.mult(player.velocity, player.mass), Vector.mult(m.holdingTarget.velocity, m.holdingTarget.mass))
         Matter.Body.setVelocity(player, Vector.mult(totalMomentum, 1 / (m.defaultMass + m.holdingTarget.mass)));
@@ -4514,26 +4674,26 @@ const m = {
             case 0: //field emitter
                 return `<strong>all</strong> applicable effects`
             case 1: //standing wave
-                // return `<span style = 'font-size:95%;'><strong>deflecting</strong> condenses +${couple.toFixed(1)} <strong class='color-s'>ice IX</strong></span>`
-                return `+${(couple * 5).toFixed(0)} maximum <strong class='color-f'>energy</strong>`
+                // return `<span style = 'font-size:95%;'><strong>deflecting</strong> condenses +${couple.toFixed(1)} <strong class='color-s' data-help='slow'>ice IX</strong></span>`
+                return `+${(couple * 5).toFixed(0)} max <strong class='energy' data-help='energy'>energy</strong>`
             case 2: //perfect diamagnetism
-                return `<span style = 'font-size:95%;'><strong>deflecting</strong> condenses ${(0.1 * couple).toFixed(2)} <strong class='color-s'>ice IX</strong></span>`
+                return `<span style = 'font-size:95%;'><strong>deflecting</strong> condenses ${(0.1 * couple).toFixed(2)} <strong class='color-s' data-help='slow'>ice IX</strong></span>`
             // return `<span style = 'font-size:89%;'><strong>invulnerable</strong> <strong>+${2*couple}</strong> seconds post collision</span>`
             case 3: //negative mass
-                return `<strong>${(0.977 ** couple).toFixed(3)}x</strong> <strong class='color-defense'>damage taken</strong>`
+                return `<strong>${(0.977 ** couple).toFixed(3)}x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong>`
             case 4: //assembler
-                return `<strong>+${(1 * couple).toFixed(1)}</strong> <strong class='color-f'>energy</strong> per second`
+                return `<strong>+${(1 * couple).toFixed(1)}</strong> <strong class='energy' data-help='energy'>energy</strong> per second`
             case 5: //plasma
-                return `<strong>${(1 + 0.02 * couple).toFixed(2)}x</strong> <strong class='color-d'>damage</strong>`
+                return `<strong>${(1 + 0.02 * couple).toFixed(2)}x</strong> <strong class='color-d' data-help='damage'>damage</strong>`
             case 6: //time dilation
                 return `<strong>+${(1 + 0.05 * couple).toFixed(2)}x</strong> longer <strong style='letter-spacing: 2px;'>stopped time</strong>` //<strong>movement</strong>, <strong>jumping</strong>, and 
             case 7: //cloaking
-                // return `<strong>${(1 + 3.3 * couple).toFixed(3)}x</strong> ambush <strong class='color-d'>damage</strong>`
-                return `<strong>${(1 + 0.06 * couple).toFixed(3)}x</strong> ambush <strong class='color-d'>damage</strong>`
+                // return `<strong>${(1 + 3.3 * couple).toFixed(3)}x</strong> ambush <strong class='color-d' data-help='damage'>damage</strong>`
+                return `<strong>${(1 + 0.06 * couple).toFixed(3)}x</strong> ambush <strong class='color-d' data-help='damage'>damage</strong>`
             case 8: //pilot wave
-                return `<strong>${(1 + 0.05 * couple).toFixed(2)}x</strong> <strong class='color-block'>block</strong> collision <strong class='color-d'>damage</strong>`
+                return `<strong>${(1 + 0.05 * couple).toFixed(2)}x</strong> <strong class='block' data-help='block'>block</strong> collision <strong class='color-d' data-help='damage'>damage</strong>`
             case 9: //wormhole
-                return `<span style = 'font-size:89%;'>after eating <strong class='color-block'>blocks</strong> <strong>+${(3 * couple).toFixed(0)}</strong> <strong class='color-f'>energy</strong></span>`
+                return `<span style = 'font-size:89%;'>after eating <strong class='block' data-help='block'>blocks</strong> <strong>+${(3 * couple).toFixed(0)}</strong> <strong class='energy' data-help='energy'>energy</strong></span>`
             case 10: //grappling hook
                 return `<span style="opacity: 1;">${powerUps.orb.ammo(1)}</span> give ${(5 * couple).toFixed(0)}% more ammo`
         }
@@ -4584,14 +4744,14 @@ const m = {
         document.getElementById("field").innerHTML = m.fieldUpgrades[index].name
         m.setHoldDefaults();
         m.fieldUpgrades[index].effect();
-        simulation.inGameConsole(`<div class="circle-grid field"></div> <span class='color-var'>m</span>.setField("<strong class='color-text'>${m.fieldUpgrades[m.fieldMode].name}</strong>")<br>input.key.field<span class='color-symbol'>:</span> ["<span class='color-text'>MouseRight</span>"]`);
+        simulation.inGameConsole(`${powerUps.orb.field()} <span class='color-var'>m</span>.setField("<strong class='color-text'>${m.fieldUpgrades[m.fieldMode].name}</strong>")<br>input.key.field<span class='color-symbol'>:</span> ["<span class='color-text'>MouseRight</span>"]`);
         if (m.fieldMode === 1) simulation.inGameConsole(`m<span class='color-symbol'>.</span>fieldUpgrades<span class='color-symbol'>[1]</span>energyHealthRatio <span class='color-symbol'>=</span> ${m.fieldUpgrades[1].energyHealthRatio} &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">←←↓→→↓</em>`);
         if (m.fieldMode === 2) simulation.inGameConsole(`m<span class='color-symbol'>.</span>fieldPosition<span class='color-symbol'>+=</span>10 &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">← → ← → ↧</em>`);
         if (m.fieldMode === 3) simulation.inGameConsole(`body<span class='color-symbol'>[i].</span>force <span class='color-symbol'>=</span> push &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">←↑→↑↑</em>`);
         if (m.fieldMode === 4) simulation.inGameConsole(`simulation<span class='color-symbol'>.</span>molecularMode <span class='color-symbol'>=</span> ${m.fieldUpgrades[4].modeText()} &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">↓→↓←↑↑↓</em>`);
         if (m.fieldMode === 5) simulation.inGameConsole(`m<span class='color-symbol'>.</span>energy <span class='color-symbol'>+=</span> 0.05 &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">←↓→→↧</em>`);
         if (m.fieldMode === 6) simulation.inGameConsole(`m<span class='color-symbol'>.</span>history<span class='color-symbol'>[(</span>m<span class='color-symbol'>.</span>cycle<span class='color-symbol'>-</span>200<span class='color-symbol'>)</span><span class='color-symbol'>%</span>600<span class='color-symbol'>]</span> <em style="float: right;font-family: monospace;font-size: 0.9rem;color: #055;">←↓→↑←↓→↑</em>`);
-        if (m.fieldMode === 7) simulation.inGameConsole(`<strong>4.5</strong><span class='color-symbol'>→</span><strong>6x</strong> <strong class='color-cloaked'>decloaking</strong> <strong class='color-d'>damage</strong> <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">↑↓←↓→</em>`);
+        if (m.fieldMode === 7) simulation.inGameConsole(`<strong>4.5</strong><span class='color-symbol'>→</span><strong>6x</strong> <strong class='color-cloaked' data-help='cloaking'>decloaking</strong> <strong class='color-d' data-help='damage'>damage</strong> <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">↑↓←↓→</em>`);
         if (m.fieldMode === 8) simulation.inGameConsole(`Composite<span class='color-symbol'>.</span>add<span class='color-symbol'>(</span>engine.world<span class='color-symbol'>,</span> block<span class='color-symbol'>)</span> <em style ="float: right; font-family: monospace;font-size:1rem;color:#055;">↓↓→↓←↓↓</em>`);
         if (m.fieldMode === 9) simulation.inGameConsole(`simulation<span class='color-symbol'>.</span>setPosition<span class='color-symbol'>({</span>x<span class='color-symbol'>:</span>0<span class='color-symbol'>,</span> y<span class='color-symbol'>:</span>0<span class='color-symbol'>})</span> <em style ="float: right; font-family: monospace;font-size:1rem;color:#055;">↓↓↓↑↓</em>`);
         if (m.fieldMode === 10) simulation.inGameConsole(`Matter<span class='color-symbol'>.</span>Body<span class='color-symbol'>.</span>setPosition<span class='color-symbol'>(</span>player<span class='color-symbol'>,{</span>x<span class='color-symbol'>:</span>0<span class='color-symbol'>,</span>y<span class='color-symbol'>:</span>0<span class='color-symbol'>})</span> <em style ="float: right; font-family: monospace;font-size:1rem;color:#055;">↑↑↓↓</em>`);
@@ -4600,8 +4760,8 @@ const m = {
     fieldUpgrades: [
         {
             name: "field emitter",
-            description: `<em>initial field</em><br>use <strong class='color-f'>energy</strong> to <strong>deflect</strong> mobs and <strong>throw</strong> <strong class='color-block'>blocks</strong>
-        <br><strong>6</strong> <strong class='color-f'>energy</strong> per second`, //            <br><strong>100</strong> max <strong class='color-f'>energy</strong>
+            description: `<em>initial field</em><br>use <strong class='energy' data-help='energy'>energy</strong> to <strong>deflect</strong> mobs and <strong>throw</strong> <strong class='block' data-help='block'>blocks</strong>
+        <br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second`, //            <br><strong>100</strong> max <strong class='energy' data-help='energy'>energy</strong>
             effect: () => {
                 m.hold = function () {
                     if (m.isHolding) {
@@ -4628,8 +4788,8 @@ const m = {
         {
             name: "standing wave",
             description: `<strong>3</strong> oscillating <strong>shields</strong> are permanently active
-            <br><strong>+150</strong> max <strong class='color-f'>energy</strong>
-            <br><strong>6</strong> <strong class='color-f'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←←↓→→↓</em>`,
+            <br><strong>+150</strong> max <strong class='energy' data-help='energy'>energy</strong>
+            <br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←←↓→→↓</em>`,
             keyLog: [null, null, null, null, null, null],
             energyHealthRatio: 1,
             drainCD: 0,
@@ -4764,7 +4924,7 @@ const m = {
         },
         {
             name: "perfect diamagnetism",
-            description: `<strong>deflecting</strong> does not drain <strong class='color-f'>energy</strong><br><strong>shield</strong> persists while inactive<br><strong>5</strong> <strong class='color-f'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">← → ← → ↧</em>`,
+            description: `<strong>deflecting</strong> does not drain <strong class='energy' data-help='energy'>energy</strong><br><strong>shield</strong> persists while inactive<br><strong>5</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">← → ← → ↧</em>`,
             keyLog: [null, null, null, null, null],
             effect: () => {
                 //store event function so it can be found and removed in m.setField()
@@ -4793,8 +4953,7 @@ const m = {
                                 // ctx.lineWidth = 1;
                                 // ctx.strokeStyle = "#f0f";
                                 // ctx.stroke();
-                                const rayResults = Matter.Query.ray(map, upper, lower, 35);
-                                if (!input.down || rayResults.length) simulation.removeEphemera(this)
+                                if (!input.down || Matter.Query.rayAny(map, upper, lower, 35)) simulation.removeEphemera(this)
                                 const unit = { x: Math.cos(m.fieldAngle), y: Math.sin(m.fieldAngle) }
                                 m.fieldPosition = Vector.add(m.fieldPosition, Vector.mult(unit, 10))
                             },
@@ -4819,7 +4978,7 @@ const m = {
                                 Vector.magnitude(Vector.sub(mob[i].position, m.fieldPosition)) - mob[i].radius < m.fieldRange &&
                                 !mob[i].isUnblockable &&
                                 Vector.dot({ x: Math.cos(m.fieldAngle), y: Math.sin(m.fieldAngle) }, Vector.normalise(Vector.sub(mob[i].position, m.fieldPosition))) > m.fieldThreshold &&
-                                Matter.Query.ray(map, mob[i].position, m.fieldPosition).length === 0
+                                !Matter.Query.rayAny(map, mob[i].position, m.fieldPosition)
                             ) {
                                 mob[i].locatePlayer();
                                 const unit = Vector.normalise(Vector.sub(m.fieldPosition, mob[i].position))
@@ -4932,14 +5091,13 @@ const m = {
                             if (
                                 Vector.magnitude(sub) - 30 < m.fieldRange &&
                                 Vector.magnitude(sub) + 130 > m.fieldRange &&
-                                Matter.Query.ray(map, m.pos, m.fieldPosition).length === 0 &&
+                                !Matter.Query.rayAny(map, m.pos, m.fieldPosition) &&
                                 Vector.dot({ x: Math.cos(m.fieldAngle), y: Math.sin(m.fieldAngle) }, unit) > m.fieldThreshold
                             ) {
                                 m.fieldCDcycle = m.cycle + m.fieldBlockCD
                                 const mag = 30
                                 const add = { x: mag * Math.cos(m.fieldAngle), y: mag * Math.sin(m.fieldAngle) }
                                 const v = Vector.mult(Vector.normalise(Vector.add(add, player.velocity)), Math.max(40, player.speed))
-                                // const v = Vector.mult(Vector.normalise(add), Math.max(40, player.speed))
                                 Matter.Body.setVelocity(player, v);
                             }
 
@@ -5045,12 +5203,12 @@ const m = {
                                 //check if looking at
                                 if (
                                     !body[i].isNotHoldable &&
-                                    Matter.Query.ray(map, body[i].position, m.pos).length === 0 &&
+                                    !Matter.Query.rayAny(map, body[i].position, m.pos) &&
                                     Vector.dot({ x: Math.cos(m.fieldAngle), y: Math.sin(m.fieldAngle) }, Vector.normalise(Vector.sub(body[i].position, m.pos))) > 0.97
                                 ) {
                                     const dist = Vector.magnitude(Vector.sub(body[i].position, m.pos))
                                     //if block is close hold it
-                                    if (dist < m.fieldRange) {
+                                    if (dist < (m.fieldRange + m.onGround * 300) || (m.eigen && body[i] === m.eigen.block)) {
                                         m.holdingTarget = body[i];
                                         m.pickUp();
                                         m.throwCharge = 4//pre charge so player can throw immediately
@@ -5061,28 +5219,19 @@ const m = {
                                             for (let i = 0; i < 2; i++)simulation.energyGenGraphic()
                                         }
                                         break
-                                    } else if (dist < target.dist && body[i].mass > 1) {
+                                    } else if ((dist < target.dist && body[i].mass > 1)) {
                                         target = {
                                             who: body[i],
                                             dist: dist
                                         }
-                                        // ctx.beginPath();
-                                        // let vertices = body[i].vertices;
-                                        // ctx.moveTo(vertices[0].x, vertices[0].y);
-                                        // for (let j = 1; j < vertices.length; j++) {
-                                        //     ctx.lineTo(vertices[j].x, vertices[j].y);
-                                        // }
-                                        // ctx.lineTo(vertices[0].x, vertices[0].y);
-                                        // ctx.strokeStyle = "#000";
-                                        // ctx.stroke();
                                     }
                                 }
                             }
 
                             //pull blocks
                             if (target.who) {
-                                const massCapped = Math.min(6, target.who.mass)
-                                let attract = Vector.mult(Vector.normalise(Vector.sub(m.pos, target.who.position)), 0.03 * massCapped)
+                                const massCapped = Math.min(7, target.who.mass)
+                                let attract = Vector.mult(Vector.normalise(Vector.sub(m.pos, target.who.position)), 0.04 * massCapped)
                                 target.who.force.x += attract.x;
                                 target.who.force.y += attract.y - massCapped * simulation.g; //negate gravity
                                 Matter.Body.setVelocity(target.who, Vector.mult(target.who.velocity, 0.8));
@@ -5142,7 +5291,7 @@ const m = {
         },
         {
             name: "negative mass",
-            description: `use <strong class='color-f'>energy</strong> to nullify &nbsp;<strong style='letter-spacing: 7px;'>gravity</strong><br><strong>0.5x</strong> <strong class='color-defense'>damage taken</strong><br><strong>6</strong> <strong class='color-f'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←↑→↑↑</em>`,
+            description: `use <strong class='energy' data-help='energy'>energy</strong> to nullify &nbsp;<strong style='letter-spacing: 7px;'>gravity</strong><br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong><br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←↑→↑↑</em>`,
             keyLog: [null, null, null, null, null],
             fieldDrawRadius: 0,
             effect: () => {
@@ -5206,7 +5355,7 @@ const m = {
                 m.holdingMassScale = 0.01; //can hold heavier blocks with lower cost to jumping
                 m.fieldMeterColor = "#333"
                 m.fieldHarmReduction = 0.5;
-                m.fieldDrawRadius = 0;
+                // m.fieldDrawRadius = 0;
 
                 m.hold = function () {
                     m.airSpeedLimit = 125 //5 * player.mass * player.mass
@@ -5319,21 +5468,8 @@ const m = {
                             } else { //slow rise and fall
                                 Matter.Body.setVelocity(player, { x: player.velocity.x * 0.99, y: player.velocity.y * 0.98 });
                             }
-                            // if (tech.isFreezeMobs) {
-                            //     const ICE_DRAIN = 0.0005
-                            //     for (let i = 0, len = mob.length; i < len; i++) {
-                            //         if (!mob[i].isMobBullet && !mob[i].shield && !mob[i].isShielded && ((mob[i].distanceToPlayer() + mob[i].radius) < this.fieldDrawRadius)) {
-                            //             if (m.energy > ICE_DRAIN * 2) {
-                            //                 m.energy -= ICE_DRAIN;
-                            //                 this.fieldDrawRadius -= 2;
-                            //                 mobs.statusSlow(mob[i], 60)
-                            //             } else {
-                            //                 break;
-                            //             }
-                            //         }
-                            //     }
-                            // }
                             //draw zero-G range
+                            // console.log(m.fieldDrawRadius, this.fieldDrawRadius, m.fieldUpgrades[3].fieldDrawRadius)
                             if (!simulation.isTimeSkipping) {
                                 ctx.beginPath();
                                 ctx.arc(m.pos.x, m.pos.y, this.fieldDrawRadius, 0, 2 * Math.PI);
@@ -5351,40 +5487,17 @@ const m = {
                         this.fieldDrawRadius = 0
                     }
                     m.drawRegenEnergy("rgba(0,0,0,0.2)")
-
-
-                    // if (tech.isHealAttract) {
-                    //     for (let i = 0; i < powerUp.length; i++) {
-                    //         if (powerUp[i].name === "heal") {
-                    //             //&& Vector.magnitudeSquared(Vector.sub(powerUp[i].position, m.pos)) < 500000
-                    //             let attract = Vector.mult(Vector.normalise(Vector.sub(m.pos, powerUp[i].position)), 0.01 * powerUp[i].mass)
-                    //             powerUp[i].force.x += attract.x;
-                    //             powerUp[i].force.y += attract.y - powerUp[i].mass * simulation.g; //negate gravity
-                    //             Matter.Body.setVelocity(powerUp[i], Vector.mult(powerUp[i].velocity, 0.7));
-                    //         }
-                    //     }
-                    // }
-
-
-                    // powerUp[i].force.x += 0.05 * (dxP / Math.sqrt(dist2)) * powerUp[i].mass;
-                    // powerUp[i].force.y += 0.05 * (dyP / Math.sqrt(dist2)) * powerUp[i].mass - powerUp[i].mass * simulation.g; //negate gravity
-                    // //extra friction
-                    // Matter.Body.setVelocity(powerUp[i], {
-                    //     x: powerUp[i].velocity.x * 0.11,
-                    //     y: powerUp[i].velocity.y * 0.11
-                    // });
-
                 }
             }
         },
         {
             name: "molecular assembler",
             modeText() {
-                return `${simulation.molecularMode === 0 ? "<strong class='color-p' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s'>ice IX" : "<strong>drones"}</strong>`
+                return `${simulation.molecularMode === 0 ? "<strong class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s' data-help='slow'>ice IX" : "<strong>drones"}</strong>`
             },
-            description: `use <strong class='color-f'>energy</strong> to <strong>deflect</strong> mobs<br>excess <strong class='color-f'>energy</strong> used to <strong class='color-print'>print</strong> ${simulation.molecularMode === 0 ? "<strong class='color-p' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s'>ice IX" : "<strong>drones"}</strong><br><strong>12</strong> <strong class='color-f'>energy</strong> per second <em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓→↓←↑↑↓</em>`,
+            description: `use <strong class='energy' data-help='energy'>energy</strong> to <strong>deflect</strong> mobs<br>excess <strong class='energy' data-help='energy'>energy</strong> used to <strong class='color-print'>print</strong> ${simulation.molecularMode === 0 ? "<strong class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s' data-help='slow'>ice IX" : "<strong>drones"}</strong><br><strong>12</strong> <strong class='energy' data-help='energy'>energy</strong> per second <em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓→↓←↑↑↓</em>`,
             setDescription() {
-                return `use <strong class='color-f'>energy</strong> to <strong>deflect</strong> mobs<br>excess <strong class='color-f'>energy</strong> used to <strong class='color-print'>print</strong> ${simulation.molecularMode === 0 ? "<strong class='color-p' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s'>ice IX" : "<strong>drones"}</strong><br><strong>12</strong> <strong class='color-f'>energy</strong> per second <em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓→↓←↑↑↓</em>`
+                return `use <strong class='energy' data-help='energy'>energy</strong> to <strong>deflect</strong> mobs<br>excess <strong class='energy' data-help='energy'>energy</strong> used to <strong class='color-print'>print</strong> ${simulation.molecularMode === 0 ? "<strong class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<strong>missiles" : simulation.molecularMode === 2 ? "<strong class='color-s' data-help='slow'>ice IX" : "<strong>drones"}</strong><br><strong>12</strong> <strong class='energy' data-help='energy'>energy</strong> per second <em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓→↓←↑↑↓</em>`
             },
             endoThermic(drain) {
                 if (tech.isEndothermic) {
@@ -5409,7 +5522,7 @@ const m = {
                         //cycle to next molecular mode
                         simulation.molecularMode = simulation.molecularMode < 3 ? simulation.molecularMode + 1 : 0
                         m.fieldUpgrades[4].description = m.fieldUpgrades[4].setDescription()
-                        const name = `${simulation.molecularMode === 0 ? "<em class='color-p' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<em>missiles" : simulation.molecularMode === 2 ? "<em class='color-s'>ice IX" : "<em>drones"}</em>`
+                        const name = `${simulation.molecularMode === 0 ? "<em class='spore' data-help='spore' style='letter-spacing: 2px;'>spores" : simulation.molecularMode === 1 ? "<em>missiles" : simulation.molecularMode === 2 ? "<em class='color-s' data-help='slow'>ice IX" : "<em>drones"}</em>`
                         simulation.inGameConsole(`simulation<span class='color-symbol'>.</span>molecularMode <span class='color-symbol'>=</span> ${simulation.molecularMode} // ${name} &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">↓→↓←↑↑↓</em>`);
                     }
                     // console.log(event.code, m.fieldUpgrades[4].keyLog)
@@ -5513,7 +5626,7 @@ const m = {
                     if (m.isHolding) {
                         m.drawHold(m.holdingTarget);
                         m.holding();
-                        if (tech.isPrinter && m.holdingTarget?.isPrinted && input.field) {
+                        if (tech.isPrinter && m.holdingTarget?.isPrinted && !m.holdingTarget.isImmutable && input.field) {
                             // if (Math.random() < 0.004 && m.holdingTarget.vertices.length < 12) m.holdingTarget.vertices.push({ x: 0, y: 0 }) //small chance to increase the number of vertices
                             m.holdingTarget.radius += Math.min(1.1, 1.3 / m.holdingTarget.mass) //grow up to a limit
                             const r1 = m.holdingTarget.radius * (1 + 0.12 * Math.sin(m.cycle * 0.11))
@@ -5550,7 +5663,7 @@ const m = {
         },
         {
             name: "plasma torch",
-            description: `use <strong class='color-f'>energy</strong> to emit short range <strong class='color-plasma'>plasma</strong><br><strong>1.5x</strong> <strong class='color-d'>damage</strong><br><strong>10</strong> <strong class='color-f'>energy</strong> per second<em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">←↓→→↧</em>`,
+            description: `use <strong class='energy' data-help='energy'>energy</strong> to emit short range <strong class='color-plasma' data-help='plasma'>plasma</strong><br><strong>1.5x</strong> <strong class='color-d' data-help='damage'>damage</strong><br><strong>10</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">←↓→→↧</em>`,
             keyLog: [null, null, null, null, null],
             set() {
                 //store event function so it can be found and removed in m.setField()
@@ -5570,7 +5683,7 @@ const m = {
                                     const closest = { distance: 1500, target: null }
                                     const dir = { x: Math.cos(m.angle), y: Math.sin(m.angle) };
                                     for (let i = 0, len = mob.length; i < len; ++i) {
-                                        if (!mob[i].isInvulnerable && mob[i].alive && Matter.Query.ray(map, m.pos, mob[i].position).length === 0) { //&& !mob[i].isDarkMatter
+                                        if (!mob[i].isInvulnerable && mob[i].alive && !Matter.Query.rayAny(map, m.pos, mob[i].position)) { //&& !mob[i].isDarkMatter
                                             const dot = Vector.dot(dir, Vector.normalise(Vector.sub(mob[i].position, m.pos))) //the dot product of diff and dir will return how much over lap between the vectors
                                             const dist = Vector.magnitude(Vector.sub(m.pos, mob[i].position))
                                             if (dist < closest.distance && dot > 0.65) { //target closest mob that player is looking at and isn't too close to target
@@ -5666,6 +5779,7 @@ const m = {
                 if (tech.isPlasmaBall) {
                     m.plasmaBall = Bodies.circle(m.pos.x + 10 * Math.cos(m.angle), m.pos.y + 10 * Math.sin(m.angle), 1, {
                         isSensor: true,
+                        collisionFilter: { category: cat.bullet, mask: 0 },
                         frictionAir: 0,
                         alpha: 0.7,
                         isAttached: false,
@@ -5729,7 +5843,7 @@ const m = {
                                             } else {
                                                 Matter.Body.setVelocity(mob[i], { x: mob[i].velocity.x * 0.93, y: mob[i].velocity.y * 0.93 });
                                             }
-                                        } else if (sub < dischargeRange + mob[i].radius && Matter.Query.ray(map, mob[i].position, this.position).length === 0) {
+                                        } else if (sub < dischargeRange + mob[i].radius && !Matter.Query.rayAny(map, mob[i].position, this.position)) {
                                             arcList.push(mob[i]) //populate electrical arc list
                                         }
                                     }
@@ -5991,6 +6105,11 @@ const m = {
                             m.grabPowerUp();
                             m.lookForBlock();
                             b.plasma();
+
+                            // const speed = 70
+                            // b.lightning(m.pos, { x: speed * Math.cos(m.angle), y: speed * Math.sin(m.angle) })
+
+
                         } else if (m.holdingTarget && m.fieldCDcycle < m.cycle) { //holding, but field button is released
                             m.pickUp();
                         } else {
@@ -6007,7 +6126,7 @@ const m = {
         },
         {
             name: "time dilation",
-            description: `use <strong class='color-f'>energy</strong> to <strong style='letter-spacing: 2px;'>stop time</strong><br><strong>1.2x</strong> <strong class="color-speed">movement</strong> and <strong><em>fire rate</em></strong><br><strong>12</strong> <strong class='color-f'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:0.8rem;color:#fff;">←↓→↑←↓→↑</em>`,
+            description: `use <strong class='energy' data-help='energy'>energy</strong> to <strong style='letter-spacing: 2px;'>stop time</strong><br><strong>1.2x</strong> <strong class="color-speed" data-help="movement">movement</strong> and <strong><span class='color-fire-rate' data-help='fire-rate'>fire rate</span></strong><br><strong>12</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:0.8rem;color:#fff;">←↓→↑←↓→↑</em>`,
             keyLog: [null, null, null, null, null, null, null, null],
             isRewindMode: false, //m.fieldUpgrades[6].isRewindMode
             isRewinding: false,
@@ -6135,7 +6254,8 @@ const m = {
                             m.pickUp();
                             this.rewindCount = 0;
                             m.wakeCheck();
-                        } else if (tech.isTimeStop && player.speed < 1 && m.onGround && !input.fire) {
+                            // } else if (tech.isTimeStop && player.speed < 1 && m.onGround && !input.fire) {
+                        } else if (tech.isTimeStop && player.speed < 1 && m.onGround && (b.activeGun === 3 ? input.fire : !input.fire)) {
                             m.timeStop();
                             this.rewindCount = 0;
                         } else {
@@ -6185,7 +6305,7 @@ const m = {
                                 m.wakeCheck();
                                 m.wakeCheck();
                             }
-                        } else if (tech.isTimeStop && player.speed < 1 && m.onGround && m.fireCDcycle < m.cycle && !input.fire) {
+                        } else if (tech.isTimeStop && player.speed < 1 && m.onGround && (b.activeGun === 3 ? input.fire : !input.fire && m.fireCDcycle < m.cycle)) {
                             m.timeStop();
                             //makes things move at 1/5 time rate, but has an annoying flicker for mob graphics, and other minor bugs
                             // if (!(m.cycle % 4)) {
@@ -6222,9 +6342,9 @@ const m = {
         },
         {
             name: "metamaterial cloaking",
-            description: `<strong>0.5x</strong> <strong class='color-defense'>damage taken</strong> while <strong class='color-cloaked'>cloaked</strong><br>after <strong class='color-cloaked'>decloaking</strong> <strong>4.5x</strong> <strong class='color-d'>damage</strong> for <strong>2</strong> s<br><strong>6</strong> <strong class='color-f'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↓←↓→</em>`,
+            description: `<strong>0.6x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong> and <strong class='color-d' data-help='damage'>damage</strong> while <strong class='color-cloaked' data-help='cloaking'>cloaked</strong><br>after <strong class='color-cloaked' data-help='cloaking'>decloaking</strong> <strong>4x</strong> <strong class='color-d' data-help='damage'>damage</strong> for <strong>2</strong> s<br><strong>6</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↓←↓→</em>`,
             keyLog: [null, null, null, null, null],
-            smallFieldRadius: 130,
+            smallFieldRadius: 110,
             effect: () => {
                 //store event function so it can be found and removed in m.setField()
                 m.fieldEvent = function (event) {
@@ -6234,12 +6354,12 @@ const m = {
                     const patternB = [input.key.up, input.key.down, input.key.left, input.key.down, input.key.right]
                     const arraysEqual = (a, b) => a.length === b.length && a.every((val, i) => val === b[i]);
                     if (arraysEqual(m.fieldUpgrades[7].keyLog, patternA) || arraysEqual(m.fieldUpgrades[7].keyLog, patternB)) {
-                        if (m.fieldUpgrades[7].smallFieldRadius === 130) {
-                            m.fieldUpgrades[7].smallFieldRadius = 70
-                            simulation.inGameConsole(`<strong>4.5</strong><span class='color-symbol'>→</span><strong>6x</strong> <strong class='color-cloaked'>decloaking</strong> <strong class='color-d'>damage</strong> &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">↑↓←↓→</em>`);
+                        if (m.fieldUpgrades[7].smallFieldRadius === 110) {
+                            m.fieldUpgrades[7].smallFieldRadius = 60
+                            simulation.inGameConsole(`<strong>4.5</strong><span class='color-symbol'>→</span><strong>6x</strong> <strong class='color-cloaked' data-help='cloaking'>decloaking</strong> <strong class='color-d' data-help='damage'>damage</strong> &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">↑↓←↓→</em>`);
                         } else {
-                            m.fieldUpgrades[7].smallFieldRadius = 130
-                            simulation.inGameConsole(`<strong>6</strong><span class='color-symbol'>→</span><strong>4.5x</strong> <strong class='color-cloaked'>decloaking</strong> <strong class='color-d'>damage</strong> &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">↑↓←↓→</em>`);
+                            m.fieldUpgrades[7].smallFieldRadius = 110
+                            simulation.inGameConsole(`<strong>6</strong><span class='color-symbol'>→</span><strong>4.5x</strong> <strong class='color-cloaked' data-help='cloaking'>decloaking</strong> <strong class='color-d' data-help='damage'>damage</strong> &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">↑↓←↓→</em>`);
                         }
                     }
                 }
@@ -6289,12 +6409,10 @@ const m = {
                     }
                     //not shooting (or using field) enable cloak
                     if (m.energy < 0.05 && m.fireCDcycle < m.cycle && !input.fire) m.fireCDcycle = m.cycle
-                    if (m.fireCDcycle + 10 < m.cycle && !input.fire) { //automatically cloak if not firing
-                        // const drain = 0.02
-                        if (!m.isCloak) { //&& m.energy > drain + 0.03
-                            // m.energy -= drain
+                    if ((b.activeGun === 3 ? input.fire && !input.field : (m.fireCDcycle + 20 < m.cycle && !input.fire))) { //automatically cloak if not firing
+                        if (!m.isCloak) {
                             m.isCloak = true //enter cloak
-                            m.fieldHarmReduction = 0.5;
+                            m.fieldHarmReduction = 0.6;
                             m.enterCloakCycle = m.cycle
                             if (tech.isCloakHealLastHit && m.lastHit > 0) {
                                 const heal = Math.min(0.75 * m.lastHit, m.energy)
@@ -6330,22 +6448,11 @@ const m = {
                             // const drain = 0.01
                             // if (m.energy > drain) {
                             for (let i = 0, len = mob.length; i < len; ++i) {
-                                if (Vector.magnitude(Vector.sub(mob[i].position, m.pos)) < stunRange && Matter.Query.ray(map, mob[i].position, m.pos).length === 0 && !mob[i].isBadTarget) {
+                                if (Vector.magnitude(Vector.sub(mob[i].position, m.pos)) < stunRange && !Matter.Query.rayAny(map, mob[i].position, m.pos) && !mob[i].isBadTarget) {
                                     isMobsAround = true
                                     mobs.statusStun(mob[i], 120)
                                 }
                             }
-                            // if (isMobsAround) {
-                            //     m.energy -= drain
-                            //     simulation.drawList.push({
-                            //         x: m.pos.x,
-                            //         y: m.pos.y,
-                            //         radius: stunRange,
-                            //         color: "hsla(0,50%,100%,0.7)",
-                            //         time: 7
-                            //     });
-                            // }
-                            // }
                         }
                     }
 
@@ -6386,7 +6493,7 @@ const m = {
                     }
                     this.drawRegenEnergyCloaking()
                     if (m.isSneakAttack && m.sneakAttackCycle + Math.min(100, 0.66 * (m.cycle - m.enterCloakCycle)) > m.cycle) { //show sneak attack status
-                        m.fieldDamage = (4.5 + (m.fieldUpgrades[7].smallFieldRadius === 130 ? 0 : 1.5)) * (1 + 0.06 * m.coupling)
+                        m.fieldDamage = (4 + (m.fieldUpgrades[7].smallFieldRadius === 110 ? 0 : 1.5)) * (1 + 0.06 * m.coupling)
                         const timeLeft = (m.sneakAttackCycle + Math.min(100, 0.66 * (m.cycle - m.enterCloakCycle)) - m.cycle) * 0.5
                         ctx.beginPath();
                         ctx.arc(m.pos.x, m.pos.y, 32 * player.scale, 0, 2 * Math.PI);
@@ -6397,14 +6504,14 @@ const m = {
                         // m.drawCloakedM()
                         // ctx.globalCompositeOperation = "source-over";
                     } else {
-                        m.fieldDamage = 1
+                        m.fieldDamage = m.isCloak ? 0.6 : 1
                     }
                 }
             }
         },
         {
             name: "pilot wave",
-            description: `use <strong class='color-f'>energy</strong> to guide <strong class='color-block'>blocks</strong><br><div class="circle-grid tech"></div> <div class="circle-grid gun"></div> <div class="circle-grid field"></div> have <strong>+3</strong> <strong class='color-choice'><span>ch</span><span>oi</span><span>ces</span></strong><br><strong>10</strong> <strong class='color-f'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓→↓←↓↓</em>`,
+            description: `use <strong class='energy' data-help='energy'>energy</strong> to guide <strong class='block' data-help='block'>blocks</strong><br><div class="circle-grid tech" data-help="orb-tech"></div> <div class="circle-grid gun" data-help="orb-gun"></div> <div class="circle-grid field" data-help="orb-field"></div> have <strong>+3</strong> <strong class='color-choice' data-help='choice'><span>ch</span><span>oi</span><span>ces</span></strong><br><strong>10</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓→↓←↓↓</em>`,
             keyLog: [null, null, null, null, null, null, null],
             collider: null,
             fieldMass: 1,
@@ -6487,7 +6594,7 @@ const m = {
                         if (m.isHolding) {
                             m.drawHold(m.holdingTarget);
                             m.holding();
-                            if (tech.isPrinter && m.holdingTarget?.isPrinted && input.field) {
+                            if (tech.isPrinter && m.holdingTarget?.isPrinted && !m.holdingTarget.isImmutable && input.field) {
                                 // if (Math.random() < 0.004 && m.holdingTarget.vertices.length < 12) m.holdingTarget.vertices.push({ x: 0, y: 0 }) //small chance to increase the number of vertices
                                 m.holdingTarget.radius += Math.min(1.1, 1.3 / m.holdingTarget.mass) //grow up to a limit
                                 const r1 = m.holdingTarget.radius * (1 + 0.12 * Math.sin(m.cycle * 0.11))
@@ -6531,7 +6638,7 @@ const m = {
                             m.fieldUpgrades[8].collider.force = push
 
                             //check for map collisions
-                            if (Matter.Query.ray(map, m.fieldPosition, m.fieldUpgrades[8].collider.position).length) {
+                            if (Matter.Query.rayAny(map, m.fieldPosition, m.fieldUpgrades[8].collider.position)) {
                                 Matter.Body.setVelocity(m.fieldUpgrades[8].collider, Vector.mult(m.fieldUpgrades[8].collider.velocity, 0.6))
                                 m.fieldRadius *= 0.6
                             }
@@ -6581,7 +6688,7 @@ const m = {
                             }
 
                             let radiusGoal, radiusSmooth, drainPassive
-                            if (Matter.Query.ray(map, m.fieldPosition, player.position).length) { //is there something blocking the player's view of the field
+                            if (Matter.Query.rayAny(map, m.fieldPosition, player.position)) { //is there something blocking the player's view of the field
                                 radiusGoal = 0
                                 radiusSmooth = 0.995
                                 drainPassive = 1.5 * m.fieldRegen * m.fieldUpgrades[8].drain
@@ -6714,7 +6821,7 @@ const m = {
         },
         {
             name: "wormhole",
-            description: `use <strong>16</strong> <strong class='color-f'>energy</strong> to enter a <strong class='color-worm'>wormhole</strong><br><strong>+8%</strong> chance to <strong class='color-dup'>duplicate</strong> <strong>power ups</strong><br><strong>8</strong> <strong class='color-f'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓↓↑↓</em>`,
+            description: `use <strong>16</strong> <strong class='energy' data-help='energy'>energy</strong> to enter a <strong class='color-worm' data-help='wormhole'>wormhole</strong><br><strong>+8%</strong> chance to <strong class='color-dup' data-help='duplicate'>duplicate</strong> <strong>power ups</strong><br><strong>8</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓↓↑↓</em>`,
             keyLog: [null, null, null, null, null],
             drain: 0,
             effect: function () {
@@ -6725,7 +6832,7 @@ const m = {
                     const patternA = ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowUp", "ArrowDown"]
                     const patternB = [input.key.down, input.key.down, input.key.down, input.key.up, input.key.down,]
                     const arraysEqual = (a, b) => a.length === b.length && a.every((val, i) => val === b[i]);
-                    const drain = tech.isFreeWormHole ? 0.02 : 0.16
+                    const drain = (tech.isFreeWormHole ? 0.02 : 0.16) + tech.manifoldCost
                     if (m.energy > drain && arraysEqual(m.fieldUpgrades[9].keyLog, patternA) || arraysEqual(m.fieldUpgrades[9].keyLog, patternB)) {
                         m.energy -= drain
                         const rayResults = Matter.Query.ray(map, m.pos, { x: m.pos.x, y: m.pos.y - 10000 }, 50)
@@ -6739,7 +6846,7 @@ const m = {
 
                             for (let i = 0, len = Math.min(10, rayResults.length); i < len; i++) {
                                 const h = rayResults[i].body.bounds.min.y
-                                if (Matter.Query.ray(map, { x: m.pos.x, y: h }, { x: m.pos.x, y: h - 150 }, 50).length === 0) {
+                                if (!Matter.Query.rayAny(map, { x: m.pos.x, y: h }, { x: m.pos.x, y: h - 150 }, 50)) {
                                     simulation.translatePlayerAndCamera({ x: m.pos.x, y: h - 90 }) //too jerky 
                                     requestAnimationFrame(() => { Matter.Body.setVelocity(player, { x: 0, y: 0 }); });
                                     hasTeleported = true
@@ -6756,7 +6863,7 @@ const m = {
                                 });
                                 for (let i = 0, len = Math.min(10, rayResultsDown.length); i < len; i++) {
                                     const h = rayResultsDown[i].body.bounds.min.y
-                                    if (Matter.Query.ray(map, { x: m.pos.x, y: h }, { x: m.pos.x, y: h - 150 }, 50).length === 0) {
+                                    if (!Matter.Query.rayAny(map, { x: m.pos.x, y: h }, { x: m.pos.x, y: h - 150 }, 50)) {
                                         simulation.translatePlayerAndCamera({ x: m.pos.x, y: h - 90 }) //too jerky 
                                         Matter.Body.setVelocity(player, { x: 0, y: 0 });
                                         // simulation.inGameConsole(`simulation<span class='color-symbol'>.</span>setPosition<span class='color-symbol'>({</span> x<span class='color-symbol'>:</span> 0<span class='color-symbol'>,</span> y<span class='color-symbol'>:</span> 0 <span class='color-symbol'>})</span> &nbsp; <em style ="font-family: monospace;font-size:1rem;color:#055;">//↓↓↓↑↓</em>`);
@@ -6873,7 +6980,7 @@ const m = {
                                         const slow = Vector.mult(body[i].velocity, slowScale)
                                         Matter.Body.setVelocity(body[i], Vector.add(slow, pull));
                                         //shrink
-                                        if (Vector.magnitude(Vector.sub(m.hole.pos1, body[i].position)) < shrinkRange) {
+                                        if (!body[i].isImmutable && Vector.magnitude(Vector.sub(m.hole.pos1, body[i].position)) < shrinkRange) {
                                             Matter.Body.scale(body[i], shrinkScale, shrinkScale);
                                             if (body[i].mass < 0.05) {
                                                 Matter.Composite.remove(engine.world, body[i]);
@@ -6907,7 +7014,7 @@ const m = {
                                     const slow = Vector.mult(body[i].velocity, slowScale)
                                     Matter.Body.setVelocity(body[i], Vector.add(slow, pull));
                                     //shrink
-                                    if (Vector.magnitude(Vector.sub(m.hole.pos2, body[i].position)) < shrinkRange) {
+                                    if (!body[i].isImmutable && Vector.magnitude(Vector.sub(m.hole.pos2, body[i].position)) < shrinkRange) {
                                         Matter.Body.scale(body[i], shrinkScale, shrinkScale);
                                         if (body[i].mass < 0.05) {
                                             Matter.Composite.remove(engine.world, body[i]);
@@ -6966,7 +7073,6 @@ const m = {
                             }
                         }
                     }
-
                     if (m.fieldCDcycle < m.cycle) {
                         const scale = 40
                         const justPastMouse = Vector.add(Vector.mult(Vector.normalise(Vector.sub(simulation.mouseInGame, m.pos)), 25), simulation.mouseInGame) //used to see if the wormhole will collide with wall
@@ -7000,25 +7106,10 @@ const m = {
                                 });
                                 player.force.x = 0
                                 player.force.y = 0
-                                // } else {
-                                //     m.wakeCheck();
-                                //     m.energy = 0;
-                                // }
                             }
 
                             m.grabPowerUp();
-                            //scale drain with distance
-                            // if (tech.isWormholeMapIgnore && Matter.Query.ray(map, m.pos, justPastMouse).length !== 0) {
-                            //     this.drain = (0.05 + 0.005 * Math.sqrt(mag)) * 2
-                            // } else {
-                            //     this.drain = tech.isFreeWormHole ? 0 : 0.05 + 0.005 * Math.sqrt(mag)
-                            // }
-                            // if (tech.isWormholeMapIgnore && Matter.Query.ray(map, m.pos, justPastMouse).length !== 0) {
-                            //     this.drain = tech.isFreeWormHole ? 0 : 0.25
-                            // } else {
-                            //     this.drain = tech.isFreeWormHole ? 0 : 0.15
-                            // }
-                            this.drain = tech.isFreeWormHole ? 0.02 : 0.16
+                            this.drain = (tech.isFreeWormHole ? 0.02 : 0.16) + tech.manifoldCost
                             const unit = Vector.perp(Vector.normalise(sub))
                             const where = { x: m.pos.x + 30 * Math.cos(m.angle), y: m.pos.y + 30 * Math.sin(m.angle) }
                             m.fieldRange = 0.97 * m.fieldRange + 0.03 * (50 + 10 * Math.sin(simulation.cycle * 0.025))
@@ -7030,13 +7121,11 @@ const m = {
                             ctx.bezierCurveTo(where.x, where.y, simulation.mouseInGame.x, simulation.mouseInGame.y, edge2a.x, edge2a.y);
                             ctx.moveTo(where.x, where.y)
                             ctx.bezierCurveTo(where.x, where.y, simulation.mouseInGame.x, simulation.mouseInGame.y, edge2b.x, edge2b.y);
+
                             if (
                                 m.energy > this.drain &&
-                                (tech.isWormholeMapIgnore || Matter.Query.ray(map, m.pos, justPastMouse).length === 0) &&
-                                Matter.Query.region(map, {
-                                    min: { x: simulation.mouseInGame.x - scale, y: simulation.mouseInGame.y - scale },
-                                    max: { x: simulation.mouseInGame.x + scale, y: simulation.mouseInGame.y + scale }
-                                }).length === 0
+                                (tech.isWormholeMapIgnore || !Matter.Query.rayAny(map, m.pos, justPastMouse)) &&
+                                !Matter.Query.rayAny(map, { x: simulation.mouseInGame.x, y: simulation.mouseInGame.y - scale }, { x: simulation.mouseInGame.x, y: simulation.mouseInGame.y + scale }, scale)
                             ) {
                                 m.hole.isReady = true;
                                 // ctx.fillStyle = "rgba(255,255,255,0.5)"
@@ -7058,11 +7147,8 @@ const m = {
                             //make new wormhole
                             if (
                                 m.hole.isReady && m.energy > this.drain &&
-                                (tech.isWormholeMapIgnore || Matter.Query.ray(map, m.pos, justPastMouse).length === 0) &&
-                                Matter.Query.region(map, {
-                                    min: { x: simulation.mouseInGame.x - scale, y: simulation.mouseInGame.y - scale },
-                                    max: { x: simulation.mouseInGame.x + scale, y: simulation.mouseInGame.y + scale }
-                                }).length === 0
+                                (tech.isWormholeMapIgnore || !Matter.Query.rayAny(map, m.pos, justPastMouse)) &&
+                                !Matter.Query.rayAny(map, { x: simulation.mouseInGame.x, y: simulation.mouseInGame.y - scale }, { x: simulation.mouseInGame.x, y: simulation.mouseInGame.y + scale }, scale)
                             ) {
                                 m.energy -= this.drain
                                 m.hole.isReady = false;
@@ -7091,25 +7177,6 @@ const m = {
                                         });
                                     }
                                 }
-                                // if (tech.isWormholeRip) {
-                                //     simulation.ephemera.push({
-                                //         count: 600, //cycles before it self removes
-                                //         do() {
-                                //             this.count--
-                                //             if (this.count < 0) simulation.removeEphemera(this)
-
-                                //             //draw effect
-                                //             //black circle with randomly changing radius and sparkles inside the black circle
-                                //             //   white stroke (maybe with dotted lines like laser)
-
-
-                                //             //damage mobs caught in ray between ends of worm hole
-                                //             // ?? also do damage at eliptical end points
-                                //             //slow or stun??
-
-                                //         },
-                                //     })
-                                // }
                                 //set holes
                                 m.hole.isOn = true;
                                 m.hole.pos1.x = m.pos.x
@@ -7129,6 +7196,7 @@ const m = {
                                     }
                                 }
                                 if (tech.isNewWormHoleDamage) {
+                                    tech.manifoldCost += 0.08
                                     const dmg = 1.5
                                     m.damageDone *= dmg
                                     simulation.ephemera.push({
@@ -7137,6 +7205,8 @@ const m = {
                                             this.count--
                                             if (this.count < 0) {
                                                 simulation.removeEphemera(this)
+                                                tech.manifoldCost -= 0.08
+                                                if (tech.manifoldCost < 0) tech.manifoldCost = 0
                                                 m.damageDone /= dmg
                                             }
                                         },
@@ -7144,133 +7214,7 @@ const m = {
                                 }
                             }
                         }
-
-                        // if (true && m.energy > 0.5) { //teleport away low mass mobs
-                        //     // && !(m.cycle % 1)
-                        //     const hit = Matter.Query.region(mob, {
-                        //         min: {
-                        //             x: m.pos.x - 80,
-                        //             y: m.pos.y - 80
-                        //         },
-                        //         max: {
-                        //             x: m.pos.x + 80,
-                        //             y: m.pos.y + 160
-                        //         }
-                        //     })
-
-                        //     // find incoming mob with low mass
-                        //     for (let i = 0; i < hit.length; i++) {
-                        //         if (hit[i].mass < 4 && m.energy > hit[i].mass * 0.06) {
-                        //             //is the mob moving towards the player?
-
-                        //             // console.log('found one', hit[i].mass)
-                        //             const unit = Vector.normalise(hit[i].velocity)
-                        //             const jump = Vector.mult(unit, 200)
-                        //             const where = Vector.add(hit[i].position, jump)
-                        //             if (Matter.Query.ray(map, hit[i].position, where).length === 0) { // check if space 180 from mob is clear of body and map
-                        //                 // m.energy -= hit[i].mass * 0.06
-                        //                 // m.fieldCDcycle = m.cycle + 30;
-                        //                 simulation.drawList.push({ x: hit[i].position.x, y: hit[i].position.y, radius: 20, color: "#fff", time: 16 });
-                        //                 Matter.Body.setPosition(hit[i], where);
-                        //                 simulation.drawList.push({ x: hit[i].position.x, y: hit[i].position.y, radius: 20, color: "#fff", time: 16 });
-                        //             }
-                        //             // break
-                        //         }
-                        //     }
-                        // }
                     }
-                    // if (input.field && m.fieldCDcycle < m.cycle) { //not hold but field button is pressed
-                    //     const justPastMouse = Vector.add(Vector.mult(Vector.normalise(Vector.sub(simulation.mouseInGame, m.pos)), 50), simulation.mouseInGame)
-                    //     const scale = 60
-                    //     const sub = Vector.sub(simulation.mouseInGame, m.pos)
-                    //     const mag = Vector.magnitude(sub)
-                    //     const drain = tech.isFreeWormHole ? 0 : 0.06 + 0.006 * Math.sqrt(mag)
-                    //     if (m.hole.isReady && mag > 250 && m.energy > drain) {
-                    //         if (
-                    //             Matter.Query.region(map, {
-                    //                 min: {
-                    //                     x: simulation.mouseInGame.x - scale,
-                    //                     y: simulation.mouseInGame.y - scale
-                    //                 },
-                    //                 max: {
-                    //                     x: simulation.mouseInGame.x + scale,
-                    //                     y: simulation.mouseInGame.y + scale
-                    //                 }
-                    //             }).length === 0 &&
-                    //             Matter.Query.ray(map, m.pos, justPastMouse).length === 0
-                    //             // Matter.Query.ray(map, m.pos, simulation.mouseInGame).length === 0 &&
-                    //             // Matter.Query.ray(map, player.position, simulation.mouseInGame).length === 0 &&
-                    //             // Matter.Query.ray(map, player.position, justPastMouse).length === 0
-                    //         ) {
-                    //             m.energy -= drain
-                    //             m.hole.isReady = false;
-                    //             m.fieldRange = 0
-                    //             Matter.Body.setPosition(player, simulation.mouseInGame);
-                    //             m.buttonCD_jump = 0 //this might fix a bug with jumping
-                    //             const velocity = Vector.mult(Vector.normalise(sub), 20)
-                    //             Matter.Body.setVelocity(player, {
-                    //                 x: velocity.x,
-                    //                 y: velocity.y - 4 //an extra vertical kick so the player hangs in place longer
-                    //             });
-                    //             if (m.immuneCycle < m.cycle + 15) m.immuneCycle = m.cycle + 15; //player is immune to damage for 1/4 seconds 
-                    //             // move bots to player
-                    //             for (let i = 0; i < bullet.length; i++) {
-                    //                 if (bullet[i].botType) {
-                    //                     Matter.Body.setPosition(bullet[i], Vector.add(player.position, {
-                    //                         x: 250 * (Math.random() - 0.5),
-                    //                         y: 250 * (Math.random() - 0.5)
-                    //                     }));
-                    //                     Matter.Body.setVelocity(bullet[i], {
-                    //                         x: 0,
-                    //                         y: 0
-                    //                     });
-                    //                 }
-                    //             }
-
-                    //             //set holes
-                    //             m.hole.isOn = true;
-                    //             m.hole.pos1.x = m.pos.x
-                    //             m.hole.pos1.y = m.pos.y
-                    //             m.hole.pos2.x = player.position.x
-                    //             m.hole.pos2.y = player.position.y
-                    //             m.hole.angle = Math.atan2(sub.y, sub.x)
-                    //             m.hole.unit = Vector.perp(Vector.normalise(sub))
-
-                    //             if (tech.isWormholeDamage) {
-                    //                 who = Matter.Query.ray(mob, m.pos, simulation.mouseInGame, 100)
-                    //                 for (let i = 0; i < who.length; i++) {
-                    //                     if (who[i].body.alive) {
-                    //                         mobs.statusDoT(who[i].body, 1, 420)
-                    //                         mobs.statusStun(who[i].body, 360)
-                    //                     }
-                    //                 }
-                    //             }
-                    //         } else {
-                    //             //draw failed wormhole
-                    //             const unit = Vector.perp(Vector.normalise(Vector.sub(simulation.mouseInGame, m.pos)))
-                    //             const where = { x: m.pos.x + 30 * Math.cos(m.angle), y: m.pos.y + 30 * Math.sin(m.angle), }
-                    //             m.fieldRange = 0.97 * m.fieldRange + 0.03 * (50 + 10 * Math.sin(simulation.cycle * 0.025))
-                    //             const edge2a = Vector.add(Vector.mult(unit, 1.5 * m.fieldRange), simulation.mouseInGame)
-                    //             const edge2b = Vector.add(Vector.mult(unit, -1.5 * m.fieldRange), simulation.mouseInGame)
-                    //             ctx.beginPath();
-                    //             ctx.moveTo(where.x, where.y)
-                    //             ctx.bezierCurveTo(where.x, where.y, simulation.mouseInGame.x, simulation.mouseInGame.y, edge2a.x, edge2a.y);
-                    //             ctx.lineTo(edge2b.x, edge2b.y)
-                    //             ctx.bezierCurveTo(simulation.mouseInGame.x, simulation.mouseInGame.y, where.x, where.y, where.x, where.y);
-                    //             // ctx.fillStyle = "rgba(255,255,255,0.5)"
-                    //             // ctx.fill();
-                    //             ctx.lineWidth = 1
-                    //             ctx.strokeStyle = "#000"
-                    //             ctx.lineDashOffset = 30 * Math.random()
-                    //             ctx.setLineDash([20, 40]);
-                    //             ctx.stroke();
-                    //             ctx.setLineDash([]);
-                    //         }
-                    //     }
-                    //     m.grabPowerUp();
-                    // } else {
-                    //     m.hole.isReady = true;
-                    // }
                     m.drawRegenEnergy("rgba(0, 166, 187, 0.3)")
                 }
             },
@@ -7362,7 +7306,7 @@ const m = {
         },
         {
             name: "grappling hook",
-            description: `use <strong class='color-f'>energy</strong> to fire a hook that <strong>pulls</strong> you<br><strong>0.5x</strong> <strong class='color-defense'>damage taken</strong><br><strong>9</strong> <strong class='color-f'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↑↓↓</em>`,
+            description: `use <strong class='energy' data-help='energy'>energy</strong> to fire a hook that <strong>pulls</strong> you<br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong><br><strong>9</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↑↓↓</em>`,
             keyLog: [null, null, null, null],
             effect: () => {
                 //store event function so it can be found and removed in m.setField()
@@ -7487,7 +7431,7 @@ const m = {
                                 if (!mob[i].isBadTarget &&
                                     !mob[i].isInvulnerable &&
                                     Vector.magnitude(Vector.sub(m.pos, mob[i].position)) < range &&
-                                    Matter.Query.ray(map, m.pos, mob[i].position).length === 0
+                                    !Matter.Query.rayAny(map, m.pos, mob[i].position)
                                 ) {
                                     m.energy -= 0.1
                                     if (m.fieldCDcycle < m.cycle + 20) m.fieldCDcycle = m.cycle + 20

@@ -81,24 +81,41 @@ function seededShuffle(array) {
 //     return best
 // }
 //this function is used for finding the point where a ray hits things,  used for lasers mostly
-function vertexCollision(v1, v1End, domains) {  //= [map, body, [playerBody, playerHead]]     //m.isCloak ? [map, body] : [map, body, [playerBody, playerHead]]
-    let results
+function vertexCollision(v1, v1End, domains, minHitDistance2 = 0) {  //= [map, body, [playerBody, playerHead]]     //m.isCloak ? [map, body] : [map, body, [playerBody, playerHead]]
     let best = { x: null, y: null, dist2: Infinity, who: null, v1: null, v2: null };
+    const rayX = v1End.x - v1.x;
+    const rayY = v1End.y - v1.y;
+    const rayMinX = v1.x < v1End.x ? v1.x : v1End.x;
+    const rayMaxX = v1.x > v1End.x ? v1.x : v1End.x;
+    const rayMinY = v1.y < v1End.y ? v1.y : v1End.y;
+    const rayMaxY = v1.y > v1End.y ? v1.y : v1End.y;
     for (let j = 0; j < domains.length; j++) {
         let domain = domains[j]
         for (let i = 0; i < domain.length; ++i) {
+            const bounds = domain[i].bounds;
+            if (rayMaxX < bounds.min.x || bounds.max.x < rayMinX || rayMaxY < bounds.min.y || bounds.max.y < rayMinY) continue;
+            if (domain[i].mob && !domain[i].alive) continue;
             let vertices = domain[i].vertices;
             const len = vertices.length - 1;
             for (let j = 0; j < len; j++) {
-                results = simulation.checkLineIntersection(v1, v1End, vertices[j], vertices[j + 1]);
-                if (results.onLine1 && results.onLine2) {
-                    const dx = v1.x - results.x;
-                    const dy = v1.y - results.y;
+                const edgeX = vertices[j + 1].x - vertices[j].x;
+                const edgeY = vertices[j + 1].y - vertices[j].y;
+                const denominator = edgeY * rayX - edgeX * rayY;
+                if (denominator !== 0) {
+                    const offsetY = v1.y - vertices[j].y;
+                    const offsetX = v1.x - vertices[j].x;
+                    const a = (edgeX * offsetY - edgeY * offsetX) / denominator;
+                    const b = (rayX * offsetY - rayY * offsetX) / denominator;
+                    if (!(a > 0 && a < 1 && b > 0 && b < 1)) continue;
+                    const x = v1.x + a * rayX;
+                    const y = v1.y + a * rayY;
+                    const dx = v1.x - x;
+                    const dy = v1.y - y;
                     const dist2 = dx * dx + dy * dy;
-                    if (dist2 < best.dist2 && (!domain[i].mob || domain[i].alive)) {
+                    if (dist2 >= minHitDistance2 && dist2 < best.dist2) {
                         best = {
-                            x: results.x,
-                            y: results.y,
+                            x: x,
+                            y: y,
                             dist2: dist2,
                             who: domain[i],
                             v1: vertices[j],
@@ -107,20 +124,30 @@ function vertexCollision(v1, v1End, domains) {  //= [map, body, [playerBody, pla
                     }
                 }
             }
-            results = simulation.checkLineIntersection(v1, v1End, vertices[0], vertices[len]);
-            if (results.onLine1 && results.onLine2) {
-                const dx = v1.x - results.x;
-                const dy = v1.y - results.y;
-                const dist2 = dx * dx + dy * dy;
-                if (dist2 < best.dist2) {
-                    best = {
-                        x: results.x,
-                        y: results.y,
-                        dist2: dist2,
-                        who: domain[i],
-                        v1: vertices[0],
-                        v2: vertices[len]
-                    };
+            const edgeX = vertices[len].x - vertices[0].x;
+            const edgeY = vertices[len].y - vertices[0].y;
+            const denominator = edgeY * rayX - edgeX * rayY;
+            if (denominator !== 0) {
+                const offsetY = v1.y - vertices[0].y;
+                const offsetX = v1.x - vertices[0].x;
+                const a = (edgeX * offsetY - edgeY * offsetX) / denominator;
+                const b = (rayX * offsetY - rayY * offsetX) / denominator;
+                if (a > 0 && a < 1 && b > 0 && b < 1) {
+                    const x = v1.x + a * rayX;
+                    const y = v1.y + a * rayY;
+                    const dx = v1.x - x;
+                    const dy = v1.y - y;
+                    const dist2 = dx * dx + dy * dy;
+                    if (dist2 >= minHitDistance2 && dist2 < best.dist2) {
+                        best = {
+                            x: x,
+                            y: y,
+                            dist2: dist2,
+                            who: domain[i],
+                            v1: vertices[0],
+                            v2: vertices[len]
+                        };
+                    }
                 }
             }
         }
@@ -229,11 +256,11 @@ function getUrlVars() {
     });
     return vars;
 }
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
     const set = getUrlVars()
     if (Object.keys(set).length !== 0) {
         // build.populateGrid() //trying to solve a bug with this, but maybe it doesn't help
-        openExperimentMenu();
+        await openExperimentMenu();
         //add experimental selections based on url
         for (const property in set) {
             set[property] = set[property].replace(/%20/g, " ")
@@ -312,7 +339,6 @@ const canvas = document.getElementById("canvas");
 //using "const" causes problems in safari when an ID shares the same name.
 const ctx = canvas.getContext("2d");
 // const ctx = canvas.getContext('2d', { alpha: false }); //optimization, this works if you wipe with the background color of each level
-
 document.body.style.backgroundColor = "#fff";
 
 //disable pop up menu on right click
@@ -326,6 +352,7 @@ function setupCanvas() {
     canvas.width2 = canvas.width / 2; //precalculated because I use this often (in mouse look)
     canvas.height2 = canvas.height / 2;
     ctx.font = "25px Arial";
+    ctx.textAlign = "center";
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     simulation.setZoom();
@@ -369,7 +396,6 @@ const build = {
                         }
                         const damage = tech.damageAdjustments()             //update damage bar
                         if (m.lastCalculatedDamage !== damage) {
-                            document.getElementById("damage-bar").style.height = Math.floor((Math.atan(0.25 * damage - 0.25) + 0.25) * 0.53 * canvas.height) + "px";
                             m.lastCalculatedDamage = damage
                         }
                     }
@@ -377,152 +403,12 @@ const build = {
             })
         }
     },
-    // pauseGridPhysics() {
-
-    //     const { Engine, Render, Runner, Bodies, Body, World, Mouse, MouseConstraint, Events, Composite } = Matter;
-
-    //     const canvas = document.getElementById('canvas');
-
-
-    //     let W = canvas.width, H = canvas.height;
-
-    //     const enginePause = Engine.create({ gravity: { y: 1 } });
-    //     const world = enginePause.world;
-
-    //     const render = Render.create({
-    //         canvas,
-    //         engine,
-    //         options: {
-    //             width: W, height: H,
-    //             wireframes: false,
-    //             background: 'transparent',
-    //             wireframeBackground: 'transparent'
-    //         }
-    //     });
-
-    //     const bodies = [];
-    //     const divMap = new Map();
-
-    //     function makeWalls() {
-    //         const thick = 30;
-    //         const opts = { isStatic: true, render: { fillStyle: 'transparent', strokeStyle: 'transparent' } };
-    //         return [
-    //             Bodies.rectangle(W / 2, H + thick / 2, W + 60, thick, opts),
-    //             Bodies.rectangle(W / 2, -thick / 2, W + 60, thick, opts),
-    //             Bodies.rectangle(-thick / 2, H / 2, thick, H + 60, opts),
-    //             Bodies.rectangle(W + thick / 2, H / 2, thick, H + 60, opts),
-    //         ];
-    //     }
-    //     World.add(world, makeWalls());
-
-
-    //     function clearAll() {
-    //         for (const b of bodies) {
-    //             World.remove(world, b);
-    //             const entry = divMap.get(b.id);
-    //             if (entry) { entry.div.remove(); divMap.delete(b.id); }
-    //         }
-    //         bodies.length = 0;
-    //     }
-
-
-
-    //     function spawnBlock(x, y) {
-    //         const bw = 80 + Math.random() * 50;
-    //         const bh = 36 + Math.random() * 20;
-    //         x = x ?? (80 + Math.random() * (W - 160));
-    //         y = y ?? (40 + Math.random() * (H * 0.3));
-
-
-
-    //         const body = Bodies.rectangle(x, y, bw, bh, {
-    //             restitution: 0.45,
-    //             friction: 0.3,
-    //             frictionAir: 0.01,
-    //             render: {
-    //                 fillStyle: "#fff",
-    //                 strokeStyle: 'rgba(0,0,0,0.12)',
-    //                 lineWidth: 1
-    //             }
-    //         });
-    //         body._bw = bw; body._bh = bh;
-
-    //         World.add(world, body);
-
-    //         const div = document.createElement('div');
-    //         div.textContent = "hi";
-    //         Object.assign(div.style, {
-    //             position: 'absolute',
-    //             width: bw + 'px',
-    //             height: bh + 'px',
-    //             display: 'flex',
-    //             alignItems: 'center',
-    //             justifyContent: 'center',
-    //             fontSize: Math.min(14, bh * 0.38) + 'px',
-    //             fontWeight: '500',
-    //             pointerEvents: 'none',
-    //             userSelect: 'none',
-    //             willChange: 'transform',
-    //             transformOrigin: '50% 50%',
-    //             letterSpacing: '0.01em',
-    //             whiteSpace: 'nowrap',
-    //         });
-    //         document.getElementById('choose-grid').appendChild(div);  //change choose-grid to something better, this probably will cause issues
-    //         divMap.set(body.id, { div, bw, bh });
-    //         bodies.push(body);
-    //     }
-
-
-    //     const mouse = Mouse.create(canvas);
-    //     const mouseConstraint = MouseConstraint.create(enginePause, {
-    //         mouse,
-    //         constraint: { stiffness: 0.2, render: { visible: false } }
-    //     });
-    //     World.add(world, mouseConstraint);
-
-    //     function syncDivs() {
-    //         for (const b of bodies) {
-    //             const entry = divMap.get(b.id);
-    //             if (!entry) continue;
-    //             const { div, bw, bh } = entry;
-    //             const { x, y } = b.position;
-    //             const angle = b.angle;
-    //             div.style.transform = `translate(${x - bw / 2}px, ${y - bh / 2}px) rotate(${angle}rad)`;
-    //         }
-    //     }
-    //     Events.on(enginePause, 'afterUpdate', syncDivs);
-    //     for (let i = 0; i < 6; i++) spawnBlock();
-
-    //     // Render.run(render);
-    //     // const runner = Runner.create();
-    //     // Runner.run(runner, enginePause);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    //     // build.sortTech('') //sorts tech into the order the player got them using tech.tech[i].cycle = m.cycle
-    //     document.getElementById("right-HUD").style.display = "none"
-    //     document.getElementById("guns").style.display = "none"
-    //     document.getElementById("field").style.display = "none"
-    //     document.getElementById("health").style.display = "none"
-    //     document.getElementById("health-bg").style.display = "none"
-    //     document.getElementById("defense-bar").style.display = "none"
-    //     document.getElementById("damage-bar").style.display = "none"
-    //     //show in game console
-    //     simulation.lastLogTime = m.cycle
-    // },
+    showDmgNumbers() {
+        localSettings.showDmgNumbers = !localSettings.showDmgNumbers
+        if (localSettings.isAllowed) localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
+        document.getElementById("show-num").checked = localSettings.showDmgNumbers
+        document.getElementById("show-num").classList.toggle("ticked")
+    },
     pauseGrid() {
         build.generatePauseLeft() //makes the left side of the pause menu with the tech
         build.generatePauseRight() //makes the right side of the pause menu with the tech
@@ -533,22 +419,21 @@ const build = {
         document.getElementById("health").style.display = "none"
         document.getElementById("health-bg").style.display = "none"
         document.getElementById("defense-bar").style.display = "none"
-        document.getElementById("damage-bar").style.display = "none"
         //show in game console
         simulation.lastLogTime = m.cycle
     },
     generatePauseLeft() {
         //left side
         let botText = ""
-        if (tech.nailBotCount) botText += `<br><strong class='color-bot no-box'>nail-bots ${tech.nailBotCount}</strong>`
-        if (tech.orbitBotCount) botText += `<br><strong class='color-bot no-box'>orbital-bots ${tech.orbitBotCount}</strong>`
-        if (tech.boomBotCount) botText += `<br><strong class='color-bot no-box'>boom-bots ${tech.boomBotCount}</strong>`
-        if (tech.laserBotCount) botText += `<br><strong class='color-bot no-box'>laser-bots ${tech.laserBotCount}</strong>`
-        if (tech.foamBotCount) botText += `<br><strong class='color-bot no-box'>foam-bots ${tech.foamBotCount}</strong>`
-        if (tech.soundBotCount) botText += `<br><strong class='color-bot no-box'>sound-bots ${tech.soundBotCount}</strong>`
-        if (tech.dynamoBotCount) botText += `<br><strong class='color-bot no-box'>dynamo-bots ${tech.dynamoBotCount}</strong>`
-        if (tech.plasmaBotCount) botText += `<br><strong class='color-bot no-box'>plasma-bots ${tech.plasmaBotCount}</strong>`
-        if (tech.missileBotCount) botText += `<br><strong class='color-bot no-box'>missile-bots ${tech.missileBotCount}</strong>`
+        if (tech.nailBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>nail-bots ${tech.nailBotCount}</strong>`
+        if (tech.orbitBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>orbital-bots ${tech.orbitBotCount}</strong>`
+        if (tech.boomBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>boom-bots ${tech.boomBotCount}</strong>`
+        if (tech.laserBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>laser-bots ${tech.laserBotCount}</strong>`
+        if (tech.foamBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>foam-bots ${tech.foamBotCount}</strong>`
+        if (tech.soundBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>sound-bots ${tech.soundBotCount}</strong>`
+        if (tech.dynamoBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>dynamo-bots ${tech.dynamoBotCount}</strong>`
+        if (tech.plasmaBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>plasma-bots ${tech.plasmaBotCount}</strong>`
+        if (tech.missileBotCount) botText += `<br><strong class='color-bot no-box' data-help='bot'>missile-bots ${tech.missileBotCount}</strong>`
 
         // <strong class='color-g'>${b.activeGun === null || b.activeGun === undefined ? "undefined" : b.guns[b.activeGun].name}</strong> (${b.activeGun === null || b.activeGun === undefined ? "0" : b.guns[b.activeGun].ammo})
 
@@ -564,47 +449,76 @@ const build = {
         let fullscreenWarning = document.fullscreenElement ? `<div><span style="font-size:1.25em;font-weight: 600; float: left;">FULLSCREEN</span> <em style="float: right;color:#ccc;">press ${cleanText(input.key.fullscreen)} or hold ESC to exit</em></div><br>` : ""
 
         let text = `<div class="pause-grid-module" style="padding: 8px;">
-<span class="color-paused" style="font-size:1.0em; float: left;">PAUSED</span> 
+<span class="color-paused" data-help="pause" style="font-size:1.0em; float: left;">PAUSED</span> 
 <em style="float: right;color:#ccc;">press ${input.key.pause} to resume</em>
 <br>
 ${fullscreenWarning}
 <button onclick="build.shareURL(false)" class='sort-button' style="font-size:1em;float: right;">copy build URL</button>
-<input onclick="build.hideHUD('settings')" type="checkbox" id="hide-hud" name="hide-hud" ${localSettings.isHideHUD ? "checked" : ""}>
+<input onclick="build.hideHUD()" type="checkbox" id="hide-hud" name="hide-hud" ${localSettings.isHideHUD ? "checked" : ""}>
 <label for="hide-hud" title="hide: tech, damage taken, damage, in game console, final boss health bar, tech: filament, tech: pair production, duplication animation, eigen animation, lower max body caps, no stroke on blocks" style="font-size:1.15em;">performance mode</label>
+<br>
+<input onclick="build.showDmgNumbers()" type="checkbox" id="show-num" name="show-num" ${localSettings.showDmgNumbers ? "checked" : ""}>
+<label for="show-num" title="show in game combat text"  style="font-size:1.15em;">damage numbers</label>
+
 </div>
 
 <div class="pause-grid-module">
-<details id = "simulation-variables-details" style="padding: 0 8px;line-height: 140%;">
-<summary>simulation variables</summary>
-<div class="pause-details">
-<strong class='color-d'>damage</strong> ${((tech.damageAdjustments())).toPrecision(4)}x
-<span style="float: right;">empty</span>
-<br><strong class='color-defense'>damage taken</strong> ${(m.defense()).toPrecision(4)}x
-<span style="float: right;">empty</span>
-<br><strong class='color-h'>health</strong> (${level.isHideHealth ? "null" : (m.health * 100).toFixed(0)} / ${(m.maxHealth * 100).toFixed(0)})
-<span style="float: right;">${powerUps.research.count} ${powerUps.orb.research()}</span>
-<br><strong class='color-f'>energy</strong> (${(m.energy * 100).toFixed(0)} / ${(m.maxEnergy * 100).toFixed(0)}) + (${(m.fieldRegen * 6000 * level.isReducedRegen).toFixed(0)}/s)
-<span style="float: right;">${tech.totalCount} ${powerUps.orb.tech()}</span>
-<br><strong><em>fire rate</em></strong> ${(1 / b.fireCDscale).toFixed(2)}x
-<span style="float: right;">mass ${player.mass.toFixed(1)}</span>
-${m.coupling ? `<br><span style = 'font-size:90%;'>` + m.couplingDescription(m.coupling) + `</span> from ${(m.coupling).toFixed(0)} ${powerUps.orb.coupling(1)}` : ""}
-<br><strong class='color-dup'>duplication</strong> ${(tech.duplicationChance() * 100).toFixed(0)}%
-<span style="float: right;"><strong class='color-junk'>JUNK</strong> ${(100 * (tech.junkChance + level.junkAdded)).toFixed(0)}%</span>
-${botText}
-<br>
-<br> ${level.levelAnnounce()}
-<span style="float: right;">position (${player.position.x.toFixed(0)}, ${player.position.y.toFixed(0)})</span>
-<br>seed ${Math.initialSeed}
-<span style="float: right;">mouse (${simulation.mouseInGame.x.toFixed(0)}, ${simulation.mouseInGame.y.toFixed(0)})</span>
-<br>cycles ${m.cycle - 600}
-<span style="float: right;">velocity (${player.velocity.x.toFixed(2)}, ${player.velocity.y.toFixed(2)})</span>
-<br>bullets ${bullet.length}
-<span style="float: right;">power ups ${powerUp.length}</span>
-${mobText}
-
-${simulation.isCheating ? "<br><br><em>lore disabled</em>" : ""}
-</div>
-</details>
+    
+        <details id="pause-music-details" style="padding: 0 8px;line-height: 140%;">
+            <summary>music</summary>
+            <div class="pause-details" style="font-size: 100%;">
+                playlists
+                <br><a data-music-playlist="instrumental" href="https://music.youtube.com/watch?v=lDlU08RU7Tk&amp;list=PLea2HwrA4R0E" target="_blank" rel="noopener noreferrer">mostly instrumental</a> <span style="color:#aaa;">classical shoegaze</span>
+                <br><a data-music-playlist="old-stuff" href="https://music.youtube.com/watch?v=qumO-vBey2Q&amp;list=PLbjRnln-q160" target="_blank" rel="noopener noreferrer">old stuff</a> <span style="color:#aaa;">new wave indie motown</span>
+                <br>
+                <br>video game OST
+                <br><a data-music-playlist="hollow-knight" href="https://music.youtube.com/watch?v=NSlkW1fFkyo&amp;list=PLmOldskd2VbL7_t-NE9p6rEboq_v0AHko" target="_blank" rel="noopener noreferrer">Hollow Knight</a>
+                <a data-music-playlist="silksong" href="https://music.youtube.com/watch?v=yUfD7w5y3Ug&amp;list=PLbNT78Q7M14yC4iIN4RaQqGa6q6zY6bqc" target="_blank" rel="noopener noreferrer" style="float: right;">Silksong</a>
+                <br><a data-music-playlist="animal-well" href="https://music.youtube.com/watch?v=yccb86YuwXs&amp;list=PLS7HzNXh-PwozVLyFxG3a7-0HplJwKPY2" target="_blank" rel="noopener noreferrer">Animal Well</a>
+                <a data-music-playlist="disco-elysium" href="https://music.youtube.com/watch?v=qMUoWTEIGx4&amp;list=OLAK5uy_n_Y491JJMFBAxR3v_o5LLTgu20URfxpuw" target="_blank" rel="noopener noreferrer" style="float: right;">Disco Elysium</a>
+                <br><a data-music-playlist="undertale" href="https://music.youtube.com/watch?v=3BR7-AzE2dQ&amp;list=OLAK5uy_ljXkQlhVlWyV7BxSxMMzgOLbzYS_-JPt4" target="_blank" rel="noopener noreferrer">UNDERTALE</a>
+                <a data-music-playlist="deltarune" href="https://music.youtube.com/watch?v=XEdoMoV4D6k&amp;list=OLAK5uy_kidGzGmzCUSJK1LAtIh7ngZwRF9MT3qjE" target="_blank" rel="noopener noreferrer" style="float: right;">deltarune</a>
+                <br>
+                <br><label>service:
+                    <select class="music-service-select" data-music-service>
+                        <option value="youtube">YouTube</option>
+                        <option value="spotify">Spotify</option>
+                        <option value="apple">Apple Music</option>
+                    </select>
+                </label>
+            </div>
+        </details>
+    
+    <details id = "simulation-variables-details" style="padding: 0 8px;line-height: 140%;">
+    <summary>simulation variables</summary>
+        <div class="pause-details">
+            <strong class='color-d' data-help='damage'>damage</strong> ${((tech.damageAdjustments())).toPrecision(4)}x
+            <span style="float: right;">empty</span>
+            <br><strong class='color-defense' data-help='defense'>damage taken</strong> ${(m.defense()).toPrecision(4)}x
+            <span style="float: right;">empty</span>
+            <br><strong class='color-h' data-help='health'>health</strong> (${level.isHideHealth ? "null" : (m.health * 100).toFixed(0)} / ${(m.maxHealth * 100).toFixed(0)})
+            <span style="float: right;">${powerUps.research.count} ${powerUps.orb.research()}</span>
+            <br><strong class='energy' data-help='energy'>energy</strong> (${(m.energy * 100).toFixed(0)} / ${(m.maxEnergy * 100).toFixed(0)}) + (${(m.fieldRegen * 6000 * level.isReducedRegen).toFixed(0)}/s)
+            <span style="float: right;">${tech.totalCount} ${powerUps.orb.tech()}</span>
+            <br><strong><span class='color-fire-rate' data-help='fire-rate'>fire rate</span></strong> ${(1 / b.fireCDscale).toFixed(2)}x
+            <span style="float: right;">mass ${player.mass.toFixed(1)}</span>
+            ${m.coupling ? `<br><span style = 'font-size:90%;'>` + m.couplingDescription(m.coupling) + `</span> from ${(m.coupling).toFixed(0)} ${powerUps.orb.coupling(1)}` : ""}
+            <br><strong class='color-dup' data-help='duplicate'>duplication</strong> ${(tech.duplicationChance() * 100).toFixed(0)}%
+            <span style="float: right;"><strong class='color-junk' data-help='junk'>JUNK</strong> ${(100 * (tech.junkChance + level.junkAdded)).toFixed(0)}%</span>
+            ${botText}
+            <br>
+            <br> ${level.levelAnnounce()}
+            <span style="float: right;">position (${player.position.x.toFixed(0)}, ${player.position.y.toFixed(0)})</span>
+            <br>seed ${Math.initialSeed}
+            <span style="float: right;">mouse (${simulation.mouseInGame.x.toFixed(0)}, ${simulation.mouseInGame.y.toFixed(0)})</span>
+            <br>cycles ${m.cycle - 600}
+            <span style="float: right;">velocity (${player.velocity.x.toFixed(2)}, ${player.velocity.y.toFixed(2)})</span>
+            <br>bullets ${bullet.length}
+            <span style="float: right;">power ups ${powerUp.length}</span>
+            ${mobText}
+            ${simulation.isCheating ? "<br><br><em>lore disabled</em>" : ""}
+        </div>
+    </details>
 </div>`
 
         text += `<div class="pause-grid-module card-background" style="height:auto;">
@@ -612,11 +526,11 @@ ${simulation.isCheating ? "<br><br><em>lore disabled</em>" : ""}
 <summary>difficulty parameters</summary>
 <div class="pause-details">
         ${simulation.difficultyMode > 0 ? `<div class="pause-difficulty-row">spawn higher <strong class="color-tier">TIER</strong> mobs<br>after every <strong>4</strong> levels</div>` : " "}
-        ${simulation.difficultyMode > 1 ? `<div class="pause-difficulty-row"><strong>0.5x</strong> <strong class='color-d'>damage</strong><br><strong>2x</strong> <strong class='color-defense'>damage taken</strong></div>` : " "}
+        ${simulation.difficultyMode > 1 ? `<div class="pause-difficulty-row"><strong>0.5x</strong> <strong class='color-d' data-help='damage'>damage</strong><br><strong>2x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong></div>` : " "}
         ${simulation.difficultyMode > 2 ? `<div class="pause-difficulty-row">spawn a <strong>2nd boss</strong><br>bosses spawn <strong>fewer</strong> ${powerUps.orb.tech()}</div>` : " "}
         ${simulation.difficultyMode > 3 ? `<div class="pause-difficulty-row">increase mob <strong class="color-tier">TIER</strong><br>after every <strong>3</strong> levels</div>` : " "}
         ${simulation.difficultyMode > 4 ? `<div class="pause-difficulty-row"><strong>+1</strong> random <strong class="constraint">constraint</strong><br>fewer initial <strong>power ups</strong></div>` : " "}
-        ${simulation.difficultyMode > 5 ? `<div class="pause-difficulty-row"><strong>0.5x</strong> <strong class='color-d'>damage</strong><br><strong>2x</strong> <strong class='color-defense'>damage taken</strong></div>` : " "}
+        ${simulation.difficultyMode > 5 ? `<div class="pause-difficulty-row"><strong>0.5x</strong> <strong class='color-d' data-help='damage'>damage</strong><br><strong>2x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong></div>` : " "}
         ${simulation.difficultyMode > 6 ? `<div class="pause-difficulty-row"><strong>+1</strong> random <strong class="constraint">constraint</strong><br>fewer ${powerUps.orb.tech()} spawn</div>` : " "}
 </div>
 </details>
@@ -647,12 +561,14 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
         let el = document.getElementById("pause-grid-left")
         el.style.display = "grid"
         el.innerHTML = text
+        updateMusicLinks()
         requestAnimationFrame(() => {
             if (localSettings.isAllowed) {
                 document.getElementById("simulation-variables-details").open = localSettings.pauseMenuDetailsOpen[0]
                 document.getElementById("difficulty-parameters-details").open = localSettings.pauseMenuDetailsOpen[1]
                 document.getElementById("console-log-details").open = localSettings.pauseMenuDetailsOpen[2]
                 if (document.getElementById("constraints-details")) document.getElementById("constraints-details").open = localSettings.pauseMenuDetailsOpen[3]
+                document.getElementById("pause-music-details").open = localSettings.pauseMenuDetailsOpen[4]
             }
         });
     },
@@ -665,15 +581,15 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
 
 
         let text = `<div class="sort">
-        <button onclick="build.sortTech('PAUSE')" class='color-paused' style="border: 1px #333 solid;border-radius: 0.3em;font-size: 0.5em;">PAUSE</button>
+        <button onclick="build.sortTech('PAUSE')" class='color-paused' data-help='pause' style="border: 1px #333 solid;border-radius: 0.3em;font-size: 0.5em;">PAUSE</button>
     <button onclick="build.sortTech('guntech')" class='sort-button'>${powerUps.orb.gunTech()}</button>
     <button onclick="build.sortTech('fieldtech')" class='sort-button'>${powerUps.orb.fieldTech()}</button>
-    <button onclick="build.sortTech('damage')" class='sort-button'><strong class='color-d'>dmg</strong></button>
-    <button onclick="build.sortTech('damage taken')" class='sort-button'><strong style="font-weight: 100;">dmg</strong></button>
-    <button onclick="build.sortTech('energy')" class='sort-button'><strong class='color-f'>nrg</strong></button>
-    <button onclick="build.sortTech('heal')" class='sort-button'><strong class='color-h'>heal</strong></button>
-    <button onclick="build.sortTech('bot')" class='sort-button color-bot' style="border-radius: 0px;">bot</button>
-    <button onclick="build.sortTech('duplic')" class='sort-button'><strong class='color-dup'>dup</strong></button>
+    <button onclick="build.sortTech('damage')" class='sort-button'><strong class='color-d' data-help='damage'>dmg</strong></button>
+    <button onclick="build.sortTech('damage taken')" class='sort-button'><strong data-help='defense' style="font-weight: 100;">dmg</strong></button>
+    <button onclick="build.sortTech('energy')" class='sort-button'><strong class='energy' data-help='energy'>nrg</strong></button>
+    <button onclick="build.sortTech('heal')" class='sort-button'><strong class='color-h' data-help='health'>heal</strong></button>
+    <button onclick="build.sortTech('bot')" class='sort-button color-bot' data-help='bot' style="border-radius: 0px;">bot</button>
+    <button onclick="build.sortTech('duplic')" class='sort-button'><strong class='color-dup' data-help='duplicate'>dup</strong></button>
 </div>`;
         // <input type="search" id="sort-input" style="width: 8em;font-size: 0.6em;color:#000;" placeholder="sort by" />
         // <button onclick="build.sortTech('input')" class='sort-button' style="border-radius: 0em;border: 1.5px #000 solid;font-size: 0.6em;" value="damage">sort</button>
@@ -841,6 +757,7 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
             if (document.getElementById("difficulty-parameters-details")) localSettings.pauseMenuDetailsOpen[1] = document.getElementById("difficulty-parameters-details").open
             if (document.getElementById("console-log-details")) localSettings.pauseMenuDetailsOpen[2] = document.getElementById("console-log-details").open
             if (document.getElementById("constraints-details")) localSettings.pauseMenuDetailsOpen[3] = document.getElementById("constraints-details").open
+            if (document.getElementById("pause-music-details")) localSettings.pauseMenuDetailsOpen[4] = document.getElementById("pause-music-details").open
             localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
         }
 
@@ -856,9 +773,7 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
         if (!localSettings.isHideHUD) {
             document.getElementById("right-HUD").style.display = "inline"
             document.getElementById("defense-bar").style.display = "inline"
-            document.getElementById("damage-bar").style.display = "inline"
         }
-        // document.body.style.overflow = "hidden"
         document.getElementById("pause-grid-left").style.display = "none"
         document.getElementById("pause-grid-right").style.display = "none"
         document.getElementById("pause-grid-right").style.opacity = "1"
@@ -950,6 +865,7 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
             }
             if (!isDeselect) { //add gun
                 document.getElementById("gun-" + index).classList.add("build-gun-selected");
+                if (tech.isOneGun && b.inventory.length > 0) tech.removeTech("integrated armament", false)
                 b.giveGuns(index)
             }
         } else if (type === "field") {
@@ -1046,15 +962,15 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
         let text = `
 <div class="experiment-start-box">
     <div class="sort" style="border: 0px;">
-    <button onclick="build.sortTech('PAUSE', true)" class='color-paused' style="border: 1px #333 solid;border-radius: 0.3em;font-size: 0.5em;">PAUSE</button>
+    <button onclick="build.sortTech('PAUSE', true)" class='color-paused' data-help='pause' style="border: 1px #333 solid;border-radius: 0.3em;font-size: 0.5em;">PAUSE</button>
         <button onclick="build.sortTech('guntech', true)" class='sort-button'>${powerUps.orb.gunTech()}</button>
         <button onclick="build.sortTech('fieldtech', true)" class='sort-button'>${powerUps.orb.fieldTech()}</button>
-        <button onclick="build.sortTech('damage', true)" class='sort-button'><strong class='color-d'>dmg</strong></button>
-        <button onclick="build.sortTech('damage taken', true)" class='sort-button'><strong style="font-weight: 100;">dmg</strong></button>
-        <button onclick="build.sortTech('energy', true)" class='sort-button'><strong class='color-f'>energy</strong></button>
-        <button onclick="build.sortTech('heal', true)" class='sort-button'><strong class='color-h'>heal</strong></button>
-        <button onclick="build.sortTech('bot', true)" class='sort-button color-bot' style="border-radius: 0px;">bot</button>
-        <button onclick="build.sortTech('duplic', true)" class='sort-button'><strong class='color-dup'>dup</strong></button>
+        <button onclick="build.sortTech('damage', true)" class='sort-button'><strong class='color-d' data-help='damage'>dmg</strong></button>
+        <button onclick="build.sortTech('damage taken', true)" class='sort-button'><strong data-help='defense' style="font-weight: 100;">dmg</strong></button>
+        <button onclick="build.sortTech('energy', true)" class='sort-button'><strong class='energy' data-help='energy'>energy</strong></button>
+        <button onclick="build.sortTech('heal', true)" class='sort-button'><strong class='color-h' data-help='health'>heal</strong></button>
+        <button onclick="build.sortTech('bot', true)" class='sort-button color-bot' data-help='bot' style="border-radius: 0px;">bot</button>
+        <button onclick="build.sortTech('duplic', true)" class='sort-button'><strong class='color-dup' data-help='duplicate'>dup</strong></button>
 
         <input type="search" id="sort-input" style="width: 7.5em;font-size: 0.6em;color:#000;" placeholder="sort by" />
         <button onclick="build.sortTech('input', true)" class='sort-button' style="border-radius: 0em;border: 1.5px #000 solid;font-size: 0.6em;" value="damage">sort</button>
@@ -1148,10 +1064,10 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
     nameLink(text) { //converts text into a clickable wikipedia search
         return `<a target="_blank" href='https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(text).replace(/' /g, '%27')}&title=Special:Search' class="link">${text}</a>`
     },
-    reset() {
+    async reset() {
         build.isExperimentSelection = true;
         build.isExperimentRun = true;
-        simulation.startGame(true); //starts game, but pauses it
+        await simulation.startGame(true); //starts game, but pauses it
         build.isExperimentSelection = true;
         build.isExperimentRun = true;
         simulation.paused = true;
@@ -1262,7 +1178,7 @@ ${b.guns[b.inventory[i]].descriptionFunction()}</div> </div>`
     }
 }
 
-function openExperimentMenu() {
+async function openExperimentMenu() {
     document.getElementById("experiment-button").style.display = "none";
     document.getElementById("training-button").style.display = "none";
     document.getElementById("start-button").style.display = "none";
@@ -1271,12 +1187,12 @@ function openExperimentMenu() {
     document.body.style.overflowY = "scroll";
     document.body.style.overflowX = "hidden";
     document.getElementById("info").style.display = 'none'
-    build.reset();
+    await build.reset();
 
 }
 
 //record settings so they can be reproduced in the experimental menu
-document.getElementById("experiment-button").addEventListener("click", () => { //setup build run
+document.getElementById("experiment-button").addEventListener("click", async () => { //setup build run
     // let field = 0;
     // let inventory = [];
     // let techList = [];
@@ -1287,7 +1203,7 @@ document.getElementById("experiment-button").addEventListener("click", () => { /
     //         techList.push(tech.tech[i].count)
     //     }
     // }
-    openExperimentMenu();
+    await openExperimentMenu();
 });
 
 
@@ -1703,7 +1619,7 @@ window.addEventListener("keydown", function (event) {
                 </tr>
                 <tr>
                     <td class='key-input-pause'>Y</td>
-                    <td class='key-used'>random tech</td>
+                    <td class='key-used'>experiment menu</td>
                 </tr>
                 <tr>
                     <td class='key-input-pause'>U</td>
@@ -1844,7 +1760,12 @@ window.addEventListener("keydown", function (event) {
                 m.energy = m.maxEnergy
                 break
             case "y":
-                tech.giveTech()
+                simulation.paused = true;
+                build.isExperimentSelection = true;
+                build.populateGrid();
+                document.getElementById("experiment-grid").style.display = "grid";
+                Object.assign(document.body.style, { overflowY: "scroll", overflowX: "hidden", cursor: "auto" });
+                if (document.pointerLockElement) document.exitPointerLock();
                 break
             case "b":
                 tech.isRerollDamage = true
@@ -2062,8 +1983,17 @@ function localStorageCheck() {
     }
 
 }
+// if (localStorageCheck()) {
+//     localSettings = JSON.parse(localStorage.getItem("localSettings"))
+//     if (localSettings) {
+//         console.log('localStorage is enabled')
 if (localStorageCheck()) {
-    localSettings = JSON.parse(localStorage.getItem("localSettings"))
+    try {
+        localSettings = JSON.parse(localStorage.getItem("localSettings"))
+    } catch (error) {
+        console.warn("Ignoring invalid localSettings data", error)
+        localSettings = null
+    }
     if (localSettings) {
         console.log('localStorage is enabled')
         localSettings.isAllowed = true
@@ -2121,8 +2051,16 @@ if (localSettings.isAllowed && !localSettings.isEmpty) {
         if (localSettings.isAllowed) localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
     }
 
-    if (localSettings.isHideHUD === undefined) localSettings.isHideHUD = true
+    if (localSettings.isHideHUD === undefined) localSettings.isHideHUD = false
     document.getElementById("hide-hud").checked = localSettings.isHideHUD
+
+    if (localSettings.showDmgNumbers === undefined) localSettings.showDmgNumbers = true
+    document.getElementById("show-num").checked = localSettings.showDmgNumbers
+
+    if (!["youtube", "spotify", "apple"].includes(localSettings.musicService)) {
+        localSettings.musicService = "youtube"
+        localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
+    }
 
     if (localSettings.difficultyCompleted === undefined) {
         localSettings.difficultyCompleted = [null, false, false, false, false, false, false, false] //null because there isn't a difficulty zero
@@ -2134,7 +2072,10 @@ if (localSettings.isAllowed && !localSettings.isEmpty) {
     lore.setTechGoal()
 
     if (localSettings.pauseMenuDetailsOpen === undefined) {
-        localSettings.pauseMenuDetailsOpen = [true, false, false, true]
+        localSettings.pauseMenuDetailsOpen = [true, false, false, true, false]
+        localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
+    } else if (localSettings.pauseMenuDetailsOpen[4] === undefined) {
+        localSettings.pauseMenuDetailsOpen[4] = false
         localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
     }
     if (localSettings.techHistory === undefined) {
@@ -2161,7 +2102,9 @@ if (localSettings.isAllowed && !localSettings.isEmpty) {
         isHuman: false,
         key: undefined,
         isHideHUD: false,
-        pauseMenuDetailsOpen: [true, false, false, true],
+        showDmgNumbers: false,
+        musicService: "youtube",
+        pauseMenuDetailsOpen: [true, false, false, true, false],
         techHistory: [],
     };
     input.setDefault()
@@ -2174,6 +2117,10 @@ if (localSettings.isAllowed && !localSettings.isEmpty) {
 document.getElementById("control-testing").style.visibility = (localSettings.loreCount === 0) ? "hidden" : "visible"
 // document.getElementById("experiment-button").style.visibility = (localSettings.loreCount === 0) ? "hidden" : "visible"
 input.controlTextUpdate()
+
+if (simulation.isCommunityMaps) {
+    level.loadMoreLevels().catch(error => console.error(error))
+}
 
 
 //**********************************************************************
@@ -2200,7 +2147,131 @@ document.getElementById("community-maps").addEventListener("input", () => {
     simulation.isCommunityMaps = document.getElementById("community-maps").checked
     localSettings.isCommunityMaps = simulation.isCommunityMaps
     if (localSettings.isAllowed) localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
+    if (simulation.isCommunityMaps) level.loadMoreLevels().catch(error => console.error(error))
 });
+
+// Add the Spotify and Apple Music playlist URLs to the empty strings below.
+const musicPlaylists = {
+    "instrumental": {
+        links: {
+            youtube: "https://music.youtube.com/watch?v=lDlU08RU7Tk&list=PLea2HwrA4R0E",
+            spotify: "https://open.spotify.com/playlist/2omGOxvDtT9LD0MZIjy5dU?si=hyYkufc5RNehpEMY3kAZDg",
+            apple: ""
+        },
+        youtubePlaylistId: "PLea2HwrA4R0E",
+        trackIds: [
+            "lDlU08RU7Tk", "5Cblo3sEJ8Y", "Jz1gvBluvc8", "ypqHpzTeVAU", "3et63xTh2bE", "SEWALc6ySI8", "qYMsd6pDSTc", "ZhHocqvb-uE", "BlpbLX4dMCA", "ogzsMhPajgA",
+            "BzImHGz4R0M", "n4lGd0KVmZo", "5D2u3ASuelQ", "YdQz6NltncU", "sb7797FQG5Y", "XvvGYEjloOg", "ziSEJeTPfyU", "u1fWF8uD6pw", "uEVbyd-u2X4", "5qVaP7mNphA",
+            "PamBD5B2wXk", "wwXtPu-iA4Q", "TkiyWhETiJw", "NUnXxh5U25Y", "FM7ALFsOH4g", "pYHEpDnvVPk", "2Agt3XfmccM", "GGwrLidX0o4", "WKg_QOy6tRk", "aolhrxi6IKc",
+            "li7KsxPyiTk", "zR2KomIYg-k", "m_npTC0Rvgg"
+        ]
+    },
+    "old-stuff": {
+        links: {
+            youtube: "https://music.youtube.com/watch?v=qumO-vBey2Q&list=PLbjRnln-q160",
+            spotify: "https://open.spotify.com/playlist/4u5qJNiBofLl8hg2BPnmcU?si=sOOIr-hWT3-z8XWkhG69Nw",
+            apple: ""
+        },
+        youtubePlaylistId: "PLbjRnln-q160",
+        trackIds: [
+            "qumO-vBey2Q", "UR-B4tHmaF8", "yWQezjGjiqs", "r2cbOdNLQuQ", "8Nlbj1t99m8", "8Jtokmp8zoE", "uZj032MNIx4", "u2XoqyVfc8g", "OPoSuyu0dsY", "egqv1mtos6A",
+            "OvzJZTkWYoY", "tVdr_JWmnsA", "1MXAIKXsVdg", "lSDfCdycdvk", "1nAE38dulRk", "kMXapsSOCD0", "aYCshYyFzls", "fid78ktHTi8", "G_GxaoOJFTY", "n4lGd0KVmZo",
+            "NF9Pc2FvgQU", "Vd_nkokQwnQ", "EMeN_aGKtIY", "AH1gqeAq3jU", "3A8FK3C2OOk", "oMfjgQ8ptrE", "e0NVBfCyoAc", "yIDx6WvXayg", "n6x7GiV9JWA", "whfOqPwa264",
+            "PkwdtkULcmA", "5D2u3ASuelQ", "CZ4QLs2jSWg", "hns_lKWj4zM", "MXcjg9o9HJ8", "Mgk3oOOd1io", "Vs-eS6IwEAA", "d7DWBxxEdXw", "hTUAaW3oGGo", "gQjYgR_3UqQ",
+            "HVyUqxilaYY", "XRAk8hrtB3k", "15aa3WIHk5M", "nqhXgO1iA1I", "LfCm57XdpO0", "zuuyR7vrL6M", "MFHwrH3J57s", "Nt9bkgRQbLs", "FwNVTYwFXS0", "7vFGKHzY_38",
+            "KvaxYUfGHnk", "ZLLccZfVV20", "DD-5_lCEMHY", "-5yXN2hvkyg", "rHQrSx9LRN8", "FuJDNYT3n0w", "YdQz6NltncU", "sb7797FQG5Y", "XvvGYEjloOg", "ziSEJeTPfyU",
+            "5qVaP7mNphA", "GylmMVT5C8Q", "9zOKBvHNWus", "YLp2cW7ICCU", "2ObjtVdsV3I", "AB2yBmZi3yo", "LnDwBrm_jsY", "Enzxdvo8NOk", "I6OR9gOMyv0", "aBKEt3MhNMM",
+            "KMXNiw4H6qA", "_NywTcGOUkE", "bgJ-hyzl6jg", "f8_EpxhNEsA", "gQLvhLbs3X4", "wwXtPu-iA4Q", "CXHz_6qmHFg", "d6nNz9At9Tc", "DiHFk7ArzYc", "vEjRMVPydOQ",
+            "GGwrLidX0o4", "TkiyWhETiJw", "NUnXxh5U25Y", "FM7ALFsOH4g", "_fTWmUlTEqE", "pYHEpDnvVPk", "i0GC7Oo_Zo4", "g0az4OkM02Y", "2Agt3XfmccM"
+        ]
+    },
+    "hollow-knight": {
+        links: {
+            youtube: "https://music.youtube.com/watch?v=NSlkW1fFkyo&list=PLmOldskd2VbL7_t-NE9p6rEboq_v0AHko",
+            spotify: "https://open.spotify.com/album/2eWzQP7WEiAEhbg7HHIHR9",
+            apple: "https://music.apple.com/us/album/hollow-knight-original-soundtrack/1263341718"
+        }
+    },
+    "silksong": {
+        links: {
+            youtube: "https://music.youtube.com/watch?v=yUfD7w5y3Ug&list=PLbNT78Q7M14yC4iIN4RaQqGa6q6zY6bqc",
+            spotify: "https://open.spotify.com/album/2IsamtSh2nFGio5SnXmwWq",
+            apple: "https://music.apple.com/us/album/hollow-knight-silksong-original-soundtrack/1838949732"
+        }
+    },
+    "animal-well": {
+        links: {
+            youtube: "https://music.youtube.com/watch?v=yccb86YuwXs&list=PLS7HzNXh-PwozVLyFxG3a7-0HplJwKPY2",
+            spotify: "",
+            apple: ""
+        }
+    },
+    "disco-elysium": {
+        links: {
+            youtube: "https://music.youtube.com/watch?v=qMUoWTEIGx4&list=OLAK5uy_n_Y491JJMFBAxR3v_o5LLTgu20URfxpuw",
+            spotify: "https://open.spotify.com/album/5IhBwGYrQotmDvfLcdIj8R",
+            apple: "https://music.apple.com/us/album/disco-elysium/1659525966"
+        }
+    },
+    "undertale": {
+        links: {
+            youtube: "https://music.youtube.com/watch?v=3BR7-AzE2dQ&list=OLAK5uy_ljXkQlhVlWyV7BxSxMMzgOLbzYS_-JPt4",
+            spotify: "https://open.spotify.com/album/2M2Ae2SvZe3fmzUtlVOV5Z",
+            apple: "https://music.apple.com/us/album/undertale-soundtrack/1528217465"
+        }
+    },
+    "deltarune": {
+        links: {
+            youtube: "https://music.youtube.com/watch?v=XEdoMoV4D6k&list=OLAK5uy_kidGzGmzCUSJK1LAtIh7ngZwRF9MT3qjE",
+            spotify: "https://open.spotify.com/album/6putGW0KxGMrgTZzplp2pF",
+            apple: "https://music.apple.com/us/album/deltarune-chapter-1-original-game-soundtrack/1443475587"
+        }
+    }
+}
+
+const musicServiceNames = {
+    youtube: "YouTube",
+    spotify: "Spotify",
+    apple: "Apple Music"
+}
+
+function updateMusicLinks() {
+    const service = localSettings.musicService
+    for (const select of document.querySelectorAll("[data-music-service]")) select.value = service
+    for (const link of document.querySelectorAll("[data-music-playlist]")) {
+        const playlist = musicPlaylists[link.dataset.musicPlaylist]
+        const url = playlist && playlist.links[service]
+        if (url) {
+            link.href = url
+            link.classList.remove("music-link-unavailable")
+            link.removeAttribute("aria-disabled")
+            link.removeAttribute("title")
+        } else {
+            link.removeAttribute("href")
+            link.classList.add("music-link-unavailable")
+            link.setAttribute("aria-disabled", "true")
+            link.title = `${musicServiceNames[service]} link not added yet`
+        }
+    }
+}
+
+document.addEventListener("input", event => {
+    if (!event.target.matches("[data-music-service]")) return
+    localSettings.musicService = event.target.value
+    if (localSettings.isAllowed) localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
+    updateMusicLinks()
+})
+
+document.addEventListener("click", event => {
+    const link = event.target.closest && event.target.closest("[data-music-playlist]")
+    if (!link || localSettings.musicService !== "youtube") return
+    const playlist = musicPlaylists[link.dataset.musicPlaylist]
+    if (!playlist || !playlist.trackIds) return
+    const trackId = playlist.trackIds[Math.floor(Math.random() * playlist.trackIds.length)]
+    link.href = `https://music.youtube.com/watch?v=${trackId}&list=${playlist.youtubePlaylistId}`
+})
+
+updateMusicLinks()
 
 document.getElementById("updates").addEventListener("toggle", function () {
     function loadJSON(path, success, error) { //generic function to get JSON
