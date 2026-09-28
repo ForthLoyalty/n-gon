@@ -1,3 +1,4 @@
+"use strict";
 // game Object ********************************************************
 //*********************************************************************
 const simulation = {
@@ -124,6 +125,77 @@ const simulation = {
         simulation.isTimeSkipping = false;
     },
     ephemera: [], //array that is used to store ephemera objects
+    pendingActions: [], //plain progress for callbacks that can outlive a level; saved in saveGame.state().runtime
+    queueAction(action) {
+        simulation.pendingActions.push(action)
+        simulation.runPendingAction(action)
+    },
+    runPendingAction(action) {
+        const queue = simulation.pendingActions
+        const cycle = () => {
+            //Loading or starting a run replaces the queue, so old callbacks cannot deliver rewards twice.
+            if (queue !== simulation.pendingActions || !queue.includes(action)) return
+            if (m.alive && simulation.stepPendingAction(action)) {
+                requestAnimationFrame(cycle)
+            } else {
+                if (action.type === "reality tech") m.isSwitchingWorlds = false
+                const index = queue.indexOf(action)
+                if (index !== -1) queue.splice(index, 1)
+            }
+        }
+        requestAnimationFrame(cycle)
+    },
+    resumePendingActions() {
+        for (const action of simulation.pendingActions) simulation.runPendingAction(action)
+    },
+    stepPendingAction(action) { //return true while this action still has work to do
+        switch (action.type) {
+            case "reality tech": {
+                if (m.cycle % 10) return true
+                if (action.remaining <= 0) return false
+                action.remaining--
+                const options = []
+                for (let i = 0; i < tech.tech.length; i++) {
+                    const t = tech.tech[i]
+                    if (t.count < t.maxCount && t.allowed() && !t.isBadRandomOption && !t.isLore && !t.isJunk && !t.isAltRealityTech) {
+                        for (let j = 0; j < t.frequency; j++) options.push(i)
+                    }
+                }
+                if (options.length) tech.giveTech(options[Math.floor(Math.random() * options.length)])
+                return true
+            }
+            case "applied science": {
+                if (action.remaining <= 0) return false
+                if (simulation.paused || simulation.isChoosing) return true
+                action.remaining--
+                if (!(action.remaining % action.delay)) {
+                    action.gunIndex++
+                    if (b.inventory[action.gunIndex] !== undefined) tech.giveRandomGunTech(b.inventory[action.gunIndex])
+                }
+                return action.remaining > 0
+            }
+            case "quintessence": {
+                if (powerUps.research.count <= 0 || powerUps.research.count === Infinity) return false
+                if (simulation.paused || simulation.isChoosing) return true
+                const t = tech.tech.find(entry => entry.name === "quintessence")
+                if (!t) return false
+                powerUps.research.changeRerolls(-1)
+                t.researchUsed++
+                powerUps.spawnDelay("coupling", t.couplingToResearch)
+                return powerUps.research.count > 0
+            }
+            case "needles": {
+                if (simulation.paused || m.isTimeDilated) return true
+                action.count++
+                if (action.count % 2) {
+                    const needle = b.needle()
+                    if (tech.isIceCrystals) needle.isIceNeedle = true
+                }
+                return action.count < action.end
+            }
+        }
+        return false
+    },
     removeEphemera: function (who, isRemoveByName) {
         if (isRemoveByName) { //who is a string
             for (let i = 0, len = simulation.ephemera.length; i < len; i++) {
@@ -144,7 +216,7 @@ const simulation = {
     runEphemera() {
         // for (let i = 0; i < simulation.ephemera.length; i++) {
         for (let i = simulation.ephemera.length - 1; i >= 0; i--) {
-            simulation.ephemera[i].do();
+            simulation.ephemera[i]?.do(); //death can clear ephemera during a callback
         }
     },
     // timeMobSkip() {
@@ -217,7 +289,7 @@ const simulation = {
     healScale: 1,
     accelScale: null,
     CDScale: null,
-    molecularMode: Math.floor(4 * Math.random()), //0 spores, 1 missile, 2 ice IX, 3 drones //randomize molecular assembler field type
+    molecularMode: Math.floor(5 * Math.random()), //0 spores, 1 missile, 2 ice IX, 3 drones, 4 following needles //randomize molecular assembler field type
 
     drawCursor() {
         const size = 10;
@@ -244,13 +316,10 @@ const simulation = {
     drawCursorCoolDown() {
         const size = 10;
         ctx.lineWidth = 2;
-        ctx.strokeStyle = "#000"; //'rgba(0,0,0,0.4)'
+        ctx.strokeStyle = tech.isShotgunTiming && m.cycle < tech.shotgunTimingEndCycle ? "#f03" : "#000";
         ctx.beginPath();
         if (m.fireCDcycle > m.cycle) {
-            ctx.strokeStyle = "#000"; //'rgba(0,0,0,0.4)'
             ctx.arc(simulation.mouse.x, simulation.mouse.y, size + 1, 0, 2 * Math.PI);
-        } else {
-            ctx.strokeStyle = "#000"; //'rgba(0,0,0,0.4)'
         }
         ctx.moveTo(simulation.mouse.x - size, simulation.mouse.y);
         ctx.lineTo(simulation.mouse.x + size, simulation.mouse.y);
@@ -278,6 +347,7 @@ const simulation = {
         }
     },
     circleFlare(dup, loops = 100) {
+        let boltNum, colors, loop
         if (!localSettings.isHideHUD) {
             boltNum = dup * 300
             const bolts = []
@@ -367,6 +437,7 @@ const simulation = {
                 drift: { x: (0.6 * Math.random()) * (Math.random() < 0.5 ? -1 : 1), y: 1 + 0.5 * Math.random() },
                 font: `${size}px Arial`,
                 do() {
+                    let pos
                     this.count++
                     if (this.count > size) {
                         simulation.removeEphemera(this)
@@ -431,7 +502,7 @@ const simulation = {
         }
     },
     switchGun() {
-        if (tech.isLongitudinal && b.activeGun === 3) b.guns[3].waves = []; //empty array of wave bullets
+        if (!tech.isTransverse && b.activeGun === 3) b.guns[3].waves = []; //empty array of longitudinal wave bullets
         if (tech.crouchAmmoCount) tech.crouchAmmoCount = 1 //this prevents hacking the tech by switching guns
         if (b.inventory.length > 0) b.activeGun = b.inventory[b.inventoryGun];
         b.guns[8].charge = 0; // foam charge to 0
@@ -686,6 +757,7 @@ const simulation = {
         ctx.restore();
     },
     energyGenGraphic(totalCycles = 10 + Math.floor(Math.random() * 20)) {
+        if (m.immuneCycle >= m.cycle || m.isTimeDilated) return
         //energy generation animation
         if (!localSettings.isHideHUD) {
             simulation.ephemera.push({
@@ -738,14 +810,7 @@ const simulation = {
     },
     firstRun: true,
     splashReturn() {
-        if (document.fullscreenElement) {
-            // mouseMove.isLockPointer = true
-            document.body.addEventListener('mousedown', mouseMove.pointerUnlock, { once: true })//watches for mouse clicks that exit draft mode and self removes
-
-            document.exitPointerLock();
-            mouseMove.isPointerLocked = false
-            mouseMove.reset()
-        }
+        mouseMove.unlock()
         document.getElementById("previous-seed").innerHTML = `previous seed: <span style="font-size:80%;">${Math.initialSeed}</span><br>`
         document.getElementById("seed").value = Math.initialSeed = Math.seed //randomize initial seed
 
@@ -768,6 +833,8 @@ const simulation = {
         document.getElementById("training-button").style.opacity = "0";
         document.getElementById("start-button").style.display = "inline"
         document.getElementById("start-button").style.opacity = "0";
+        saveGame.updateContinueButton()
+        document.getElementById("continue-button").style.opacity = "0";
         document.getElementById("experiment-grid").style.display = "none"
         document.getElementById("pause-grid-left").style.display = "none"
         document.getElementById("pause-grid-right").style.display = "none"
@@ -781,6 +848,7 @@ const simulation = {
             document.getElementById("experiment-button").style.opacity = "1";
             document.getElementById("training-button").style.opacity = "1";
             document.getElementById("start-button").style.opacity = "1";
+            document.getElementById("continue-button").style.opacity = "1";
             document.getElementById("info").style.opacity = "1";
             document.getElementById("splash").style.opacity = "1";
         }, 200);
@@ -788,8 +856,13 @@ const simulation = {
     fpsInterval: 0, //set in startGame
     then: null,
     async startGame(isBuildRun = false, isTrainingRun = false) {
+        let i, len
         if (simulation.isStartingGame) return
         simulation.isStartingGame = true
+        //request before any await so it still counts as part of the click that started the game, fullscreenchange locks the mouse
+        if (localSettings.isAutoFullscreen && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => console.error('Error attempting to enable fullscreen:', err));
+        }
         if (simulation.isCommunityMaps || isTrainingRun) {
             try {
                 await level.loadMoreLevels()
@@ -819,6 +892,7 @@ const simulation = {
         }
         simulation.isTextLogOpen = true
         simulation.clearMap()
+        level.pendingTransfers = null //a fresh run never inherits arrivals from the previous run
         if (!isBuildRun) { //if a build run logic flow returns to "experiment-button").addEventListener
             document.body.style.cursor = "none";
             document.body.style.overflow = "hidden"
@@ -839,6 +913,7 @@ const simulation = {
         document.getElementById("experiment-button").style.display = "none";
         document.getElementById("training-button").style.display = "none";
         document.getElementById("start-button").style.display = "none";
+        document.getElementById("continue-button").style.display = "none";
         // document.getElementById("experiment-button").style.opacity = "0";
         document.getElementById("splash").onclick = null; //removes the onclick effect so the function only runs once
         document.getElementById("splash").style.display = "none"; //hides the element that spawned the function
@@ -880,6 +955,8 @@ const simulation = {
         level.populateLevels()
         input.endKeySensing();
         simulation.ephemera = []
+        simulation.pendingActions = []
+        powerUps.pendingSpawns = []
         powerUps.powerUpStorage = []
         tech.resetAllTech(); //sets tech to default values
         b.resetAllGuns();
@@ -1071,16 +1148,14 @@ const simulation = {
                     }
                     if (isNaN(player.position.x)) m.death();
                     if (m.lastKillCycle + 300 > m.cycle) { //effects active for 5 seconds after killing a mob
-                        if (tech.isEnergyRecovery && m.immuneCycle < m.cycle) {
-                            m.energy += m.maxEnergy * 0.05 * level.isReducedRegen
+                        if (tech.isEnergyRecovery) {
+                            m.addEnergy(m.maxEnergy * 0.05 * level.isReducedRegen)
                             for (let i = 0; i < 2; i++)simulation.energyGenGraphic()
                         }
                         if (tech.isHealthRecovery) {
                             if (tech.isEnergyHealth) {
-                                if (m.immuneCycle < m.cycle) {
-                                    m.energy += m.maxEnergy * 0.005 * level.isReducedRegen
-                                    simulation.energyGenGraphic()
-                                }
+                                m.addEnergy(m.maxEnergy * 0.005 * level.isReducedRegen)
+                                simulation.energyGenGraphic()
                             } else {
                                 const heal = 0.005 * m.maxHealth
                                 m.addHealth(heal)
@@ -1187,11 +1262,12 @@ const simulation = {
             },
         })
 
+        saveGame.captureBaseline() //autosaves only store what changed from this fresh run
         //setup FPS cap
         simulation.fpsInterval = 1000 / simulation.fpsCap;
         simulation.then = Date.now();
         requestAnimationFrame(cycle); //starts game loop
-        // if (document.fullscreenElement) mouseMove.isLockPointer = true //this interacts with the mousedown event listener to exit pointer lock
+        mouseMove.lock()
     },
     clearTimeouts() {
         let id = window.setTimeout(function () { }, 0);
@@ -1201,8 +1277,11 @@ const simulation = {
     },
     clearNow: false,
     clearMap() {
+        let i, len
+        level.disableExit = false; //clear level-specific locks, including when starting a new run
         // level.mirrorDoors.reset();
         level.exit.reflection = null;
+        level.exit.ripple = null;
         level.exit.isInverted = false;
         level.exit.bottomOffset = 20;
         level.isVerticalFLipLevel = false
@@ -1211,13 +1290,13 @@ const simulation = {
         simulation.unFlipCameraVertical()
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         if (m.alive) {
-            if (tech.isLongitudinal) b.guns[3].waves = []; //empty array of wave bullets
+            if (!tech.isTransverse) b.guns[3].waves = []; //empty array of longitudinal wave bullets
             if (b.guns[10].have) { //do you have mines as a gun
                 let count = 0;
                 for (i = 0, len = bullet.length; i < len; i++) { //count mines left on map
                     if (
                         (bullet[i].bulletType === "mine" && (!tech.isMineSentry || bullet[i].shots === undefined)) ||
-                        bullet[i].bulletType === "laser mine") {
+                        (bullet[i].bulletType === "laser mine" && !bullet[i].isDetonated)) { //laser mines that already fired aren't refunded
                         count++
                     }
                 }
@@ -1227,32 +1306,21 @@ const simulation = {
                 simulation.updateGunHUD();
             }
 
-            if (tech.isMutualism && !tech.isEnergyHealth) {
+            for (let i = 0; i < bullet.length; i++) { //harpoons still out give back their ammo
+                if (bullet[i].refundsAmmo) b.guns[9].ammo++
+            }
+            if (tech.isMutualism) {
                 for (let i = 0; i < bullet.length; i++) {
                     if (bullet[i].isMutualismActive) {
-                        if (tech.isMutualism && this.isMutualismActive) {
-                            if (tech.isEnergyHealth) {
-                                m.energy += 0.01 + 0.01 * ((bullet[i].isSpore || bullet[i].isFlea) ? 0 : 1)
-                                simulation.energyGenGraphic()
-                            } else {
-                                m.health += 0.01 + 0.01 * ((bullet[i].isSpore || bullet[i].isFlea) ? 0 : 1)
-                                if (m.health > m.maxHealth) m.health = m.maxHealth;
-                                m.displayHealth();
-                            }
+                        const refund = bullet[i].isSpore ? 0.01 : 0.02
+                        bullet[i].isMutualismActive = false
+                        if (tech.isEnergyHealth) {
+                            m.addEnergy(refund)
+                            simulation.energyGenGraphic()
+                        } else {
+                            m.health = Math.min(m.maxHealth, m.health + refund)
+                            m.displayHealth();
                         }
-                    }
-                }
-            }
-            if (tech.isEndLevelPowerUp) {
-                for (let i = 0; i < powerUp.length; i++) {
-                    if (powerUp[i].name === "tech") {
-                        tech.giveTech()
-                    } else if (powerUp[i].name === "gun") {
-                        if (!tech.isOneGun) b.giveGuns("random")
-                    } else if (powerUp[i].name === "field") {
-                        if (m.fieldMode === 0) m.setField(Math.ceil(Math.random() * (m.fieldUpgrades.length - 1))) //pick a random field, but not field 0
-                    } else {
-                        powerUp[i].effect();
                     }
                 }
             }
@@ -1260,7 +1328,8 @@ const simulation = {
         simulation.lastLogTime = 0; //clear previous messages
         spawn.allowShields = true;
         powerUps.totalPowerUps = powerUp.length
-        let holdTarget = (m.holdingTarget) ? m.holdingTarget : undefined //if player is holding something this remembers it before it gets deleted
+        let holdTarget = saveGame.isResuming ? saveGame.pendingHeldBlock : m.holdingTarget //checkpoints carry plain geometry, normal transitions carry the body
+        saveGame.pendingHeldBlock = null
         tech.deathSpawnsFromBoss = 0;
         simulation.fallHeight = 3000;
         document.body.style.backgroundColor = "#eee" //"#d8dadf";
@@ -1280,143 +1349,16 @@ const simulation = {
         simulation.drawList = [];
         mobs.maxMobBody = 40
 
-        if (tech.isHealAttract && m.alive) { //send health power ups to the next level
-            let healCount = 0
-            for (let i = 0, len = powerUp.length; i < len; i++) {
-                if (powerUp[i].name === "heal") healCount++
-            }
-            //respawn health in animation frame
-            let respawnHeal = () => {
-                if (healCount > 0) {
-                    requestAnimationFrame(respawnHeal);
-                    if (!simulation.paused && !simulation.isChoosing) {
-                        healCount--
-                        powerUps.directSpawn(level.enter.x + 50 + 100 * (Math.random() - 0.5), level.enter.y - 60 + 100 * (Math.random() - 0.5), "heal");
-                    }
-                }
-            }
-            requestAnimationFrame(respawnHeal);
-        }
-        if (tech.isDronesTravel && m.alive) {
-            //count drones
-            // let droneCount = 0
-            let droneArray = []
-            let sporeCount = 0
-            let wormCount = 0
-            let fleaCount = 0
-            // let zombieCount = 0
-            for (let i = 0; i < bullet.length; ++i) {
-                if (bullet[i].isDrone && bullet[i].endCycle !== Infinity) {
-                    droneArray.push({
-                        isImproved: bullet[i].isImproved,
-                        scale: bullet[i].scale,
-                        endCycle: bullet[i].endCycle,
-                    })
-                } else if (bullet[i].isSpore) {
-                    sporeCount++
-                } else if (bullet[i].wormSize) {
-                    wormCount++
-                } else if (bullet[i].isFlea) {
-                    fleaCount++
-                }
-                // else if (bullet[i].isZombie) {
-                //     zombieCount++
-                // }
-            }
-
-            // const where = m.pos
-            //respawn drones in animation frame
-            requestAnimationFrame(() => {
-                let respawnDrones = () => {
-                    if (droneArray.length) {
-                        requestAnimationFrame(respawnDrones);
-                        if (!simulation.paused && !simulation.isChoosing && m.alive) {
-                            const where = { x: level.enter.x + 50, y: level.enter.y - 60 }
-                            if (tech.isDroneRadioactive) {
-                                b.droneRadioactive({ x: where.x + 50 * (Math.random() - 0.5), y: where.y + 50 * (Math.random() - 0.5) }, 0)
-                                if (droneArray[0].scale) bullet[bullet.length - 1].size = droneArray[0].scale
-                            } else {
-                                b.drone({ x: where.x + 50 * (Math.random() - 0.5), y: where.y + 50 * (Math.random() - 0.5) }, 0)
-                                const who = bullet[bullet.length - 1]
-                                if (droneArray[0].isImproved) who.isImproved = true;
-                                if (droneArray[0].scale) {
-                                    who.scale = droneArray[0].scale
-                                    Matter.Body.scale(who, who.scale, who.scale);
-                                }
-                                who.endCycle = droneArray[0].endCycle + 300
-                            }
-                            droneArray.shift() //remove first element
-                        }
-                    }
-                }
-                requestAnimationFrame(respawnDrones);
-            });
-
-            //respawn spores in animation frame
-            let respawnSpores = () => {
-                if (sporeCount > 0) {
-                    requestAnimationFrame(respawnSpores);
-                    if (!simulation.paused && !simulation.isChoosing) {
-                        sporeCount--
-                        const where = { x: level.enter.x + 50, y: level.enter.y - 60 }
-                        b.spore({ x: where.x + 100 * (Math.random() - 0.5), y: where.y + 120 * (Math.random() - 0.5) })
-                    }
-                }
-            }
-            requestAnimationFrame(respawnSpores);
-
-            //respawn worms in animation frame
-            let respawnWorms = () => {
-                if (wormCount > 0) {
-                    requestAnimationFrame(respawnWorms);
-                    if (!simulation.paused && !simulation.isChoosing) {
-                        wormCount--
-                        const where = { x: level.enter.x + 50, y: level.enter.y - 60 }
-                        b.worm({ x: where.x + 100 * (Math.random() - 0.5), y: where.y + 120 * (Math.random() - 0.5) })
-                    }
-                }
-            }
-            requestAnimationFrame(respawnWorms);
-
-            //respawn fleas in animation frame
-            let respawnFleas = () => {
-                if (fleaCount > 0) {
-                    requestAnimationFrame(respawnFleas);
-                    if (!simulation.paused && !simulation.isChoosing) {
-                        fleaCount--
-                        const speed = 6 + 3 * Math.random()
-                        const angle = 2 * Math.PI * Math.random()
-                        const where = { x: level.enter.x + 50, y: level.enter.y - 60 }
-                        b.flea({ x: where.x + 100 * (Math.random() - 0.5), y: where.y + 120 * (Math.random() - 0.5) }, { x: speed * Math.cos(angle), y: speed * Math.sin(angle) })
-                    }
-                }
-            }
-            requestAnimationFrame(respawnFleas);
-
-
-            //respawn spores in animation frame
-            // let respawnZombies = () => {
-            //     if (zombieCount > 0) {
-            //         requestAnimationFrame(respawnZombies);
-            //         if (!simulation.paused && !simulation.isChoosing) {
-            //             zombieCount--
-            //             spawn.zombie(where.x + 100 * (Math.random() - 0.5), where.y + 120 * (Math.random() - 0.5))
-            //         }
-            //     }
-            // }
-            // requestAnimationFrame(respawnZombies);
-        }
-        if (tech.isQuantumEraser && m.alive) {
+        level.collectTransfers()
+        if (tech.isQuantumEraser && m.alive && !saveGame.isResuming) {
             let count = 0
             for (let i = 0, len = mob.length; i < len; i++) {
                 if (mob[i].isDropPowerUp && mob[i].alive) count++
             }
             count *= 0.44 //to fake the chance, this makes it not random, and more predictable
-            let cycle = () => { //run after waiting a cycle for the map to be cleared
-                const types = ["heal", "ammo", "heal", "ammo", "research", "coupling", "boost", "tech", "gun", "field"]
-                for (let i = 0; i < count; i++) powerUps.spawnDelay(types[Math.floor(Math.random() * types.length)], 1)
-            }
-            requestAnimationFrame(cycle);
+            //Queue before the checkpoint; spawnDelay still waits until the map has been cleared.
+            const types = ["heal", "ammo", "heal", "ammo", "research", "coupling", "boost", "tech", "gun", "field"]
+            for (let i = 0; i < count; i++) powerUps.spawnDelay(types[Math.floor(Math.random() * types.length)], 1)
         }
 
         function removeAll(array) {
@@ -1710,6 +1652,7 @@ const simulation = {
         },
 
         circleLoS(pos, radius) {
+            let test
             function allCircleLineCollisions(c, radius, domain) {
                 var lines = [];
                 for (const obj of domain) {
@@ -2531,6 +2474,7 @@ const simulation = {
         simulation.setZoom();
 
         document.body.addEventListener("mouseup", (e) => {
+            let len
             if (simulation.testing && simulation.constructMouseDownPosition) {
                 function round(num, round = 25) {
                     return Math.ceil(num / round) * round;

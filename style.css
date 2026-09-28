@@ -182,6 +182,23 @@ summary {
     /* border-radius: 8px 0 8px 8px; */
 }
 
+#continue-button {
+    display: none;
+    position: absolute;
+    bottom: 56px;
+    right: 4px;
+    z-index: 12;
+}
+
+/* an autosave adds continue above experiment and moves training and start up one slot */
+body.has-autosave #training-button {
+    bottom: 108px;
+}
+
+body.has-autosave #start-button {
+    bottom: 160px;
+}
+
 
 
 
@@ -1412,6 +1429,16 @@ summary {
     margin-bottom: -0.5px;
 }
 
+.qubit-circle {
+    width: 0.7em;
+    height: 0.7em;
+    border-radius: 50%;
+    display: inline-block;
+    background-color: #fff;
+    border: 0.05em #000 solid;
+    margin-bottom: -0.5px;
+}
+
 .boost-circle {
     width: 0.7em;
     height: 0.7em;
@@ -1902,7 +1929,7 @@ summary {
 
 .difficulty-option-selected {
     /* background-color: rgb(201, 227, 240); */
-    background-color: hsl(261, 30%, 88%);
+    background-color: hsl(var(--difficulty-hue, 150), 30%, 85%);
 }
 
 .difficulty-option:hover:not(:disabled),
@@ -1911,7 +1938,7 @@ summary {
 }
 
 .difficulty-option-selected:hover:not(:disabled) {
-    background-color: hsl(261, 30%, 84%);
+    background-color: hsl(var(--difficulty-hue, 150), 30%, 81%);
 }
 
 .difficulty-option-section {
@@ -1978,7 +2005,7 @@ summary {
     inset: 0 auto 0 0;
     width: 0;
     /* background-color: rgb(236, 230, 234); */
-    background-color: hsl(261, 30%, 88%);
+    background-color: hsl(var(--difficulty-hue, 150), 30%, 85%);
     /* background-color: rgb(0, 0, 0); */
     transition: width 200ms ease;
     pointer-events: none;
