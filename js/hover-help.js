@@ -30,7 +30,8 @@ time dilation: 1.05x longer stopped time<br>
 metamaterial cloaking: 1.060x ambush damage<br>
 pilot wave: 1.05x block collision damage<br>
 wormhole: +3 energy after eating a block<br>
-grappling hook: ammo power ups give 5% more ammo
+grappling hook: ammo power ups give 5% more ammo<br>
+portal: +1 energy after going through a portal
 <br><br>// <em>in physics, coupled systems interact so a change in one can influence the other</em>`
     const dropScale = () => tech.isCrystallography && powerUp.length === 0 ? 3 : 1
     const dropPercent = chance => `${Number((100 * Math.min(1, Math.max(0, chance || 0))).toFixed(2))}%`
@@ -88,6 +89,12 @@ grappling hook: ammo power ups give 5% more ammo
         <br><br>// it can also be used as a currency to trade for certain tech`,
         wormhole: `// <strong class="color-worm">wormholes</strong> teleport the player, collect power ups, and consume nearby blocks
         <br><br>// <em>a wormhole connects locations in spacetime</em>`,
+        portal: () => `// <strong class="color-portal"><span>por</span><span>tals</span></strong> connect two flat surfaces
+        <br><br>// fire (left click or ${keyLabel(input.key.fire)}) places the <strong class="color-portal"><span>cyan</span></strong> portal and field (right click or ${keyLabel(input.key.field)}) places the <strong class="color-portal"><span></span><span>orange</span></strong> portal when you let go, so they replace your guns and your field
+        <br><br>// hold either button to pick up a block you're looking at, then hold and let go to throw it
+        <br><br>// the player and blocks that go in one come out the other, keeping their speed
+        <br><br>// power ups that go in are absorbed and picked up
+        <br><br>// <em>speedy thing goes in, speedy thing comes out</em>`,
         wire: `// <strong class="color-wire">filament</strong> is a thin strand attached to the player
         <br><br>// filament grows after consuming power ups and shrinks after touching mobs`,
         junk: `// <strong class="color-junk">JUNK</strong> tech are ideas that didn't work out because they were annoying, harmful, or overpowered`,
@@ -102,6 +109,8 @@ grappling hook: ammo power ups give 5% more ammo
         <br><br>// sporangium attach to surfaces and grow <strong class="spore">spores</strong>, <strong class="spore">fleas</strong>, or <strong class="spore">worms</strong>
         <br><br>// <em>a sporangium is an enclosure where biological spores are grown</em>`,
         slow: `// <strong class="color-s">slows</strong> reduce mob movement speed`,
+        "mob-death": () => `// <strong class="color-death">mob death</strong> tech have effects after mobs die
+        <br><br>// ${tech.tech.filter(t => t.isMobDeathTech).map(t => t.count ? `<strong>${t.name}</strong>` : t.name).join(", ")}`,
         checkpoint: () => {
             const save = typeof saveGame !== "undefined" ? saveGame.latest : null
             const current = save ? `<br><br>// this checkpoint is from the start of level ${save.state.level.levelsCleared}: <strong>${save.state.level.levels[save.state.level.onLevel] ?? ""}</strong>` : ""

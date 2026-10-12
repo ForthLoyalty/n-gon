@@ -39,6 +39,7 @@ const m = {
         });
         Matter.Body.setMass(player, m.mass);
         Composite.add(engine.world, [player]);
+        m.skin.floorDrop = 0 //the new body has normal floor vertices, so scale invariance's remove() doesn't lower them
     },
     cycle: 600, //starts at 600 cycles instead of 0 to prevent bugs with m.history
     lastKillCycle: 0,
@@ -244,6 +245,44 @@ const m = {
             return true
         }
     },
+    mapDepth() { //how deep the player's body or head is in the map, normal play stays below 6 and stuck players are above 15
+        let depth = 0
+        for (const part of [playerBody, playerHead]) {
+            const hits = Matter.Query.collides(part, map)
+            for (let i = 0; i < hits.length; i++) {
+                if (hits[i].depth > depth) depth = hits[i].depth
+            }
+        }
+        return depth
+    },
+    isInsideMap() { //the center of the player is in the map, or they are deep in a thin platform or wedged in a narrow gap
+        return Matter.Query.rayAny(map, m.pos, player.position) || m.mapDepth() > 15
+    },
+    lastUnstuckCycle: -1000,
+    unstuck() { //move the player to the last spot in their history where they weren't in the map, or to the level start if it keeps happening
+        let where = { x: level.enter.x + 50, y: level.enter.y - 20 }
+        if (m.cycle > m.lastUnstuckCycle + 900) {
+            m.doCrouch() //test spots with the smallest player, they stand back up when their head is clear
+            for (let i = 10; i < 600; i += 10) {
+                const history = m.history[(simulation.cycle - i) % 600]
+                if (!history) continue
+                Matter.Body.setPosition(player, history.position)
+                if (m.mapDepth() < 8) { //normal play stays below 6
+                    where = history.position
+                    break
+                }
+            }
+        }
+        m.lastUnstuckCycle = m.cycle
+        Matter.Body.setVelocity(player, { x: 0, y: 0 });
+        Matter.Body.setPosition(player, where);
+        for (let i = 0; i < bullet.length; i++) { //move bots
+            if (bullet[i].botType) {
+                Matter.Body.setPosition(bullet[i], Vector.add(player.position, { x: 250 * (Math.random() - 0.5), y: 250 * (Math.random() - 0.5) }));
+                Matter.Body.setVelocity(bullet[i], { x: 0, y: 0 });
+            }
+        }
+    },
     buttonCD_jump: 0, //cool down for player buttons
     jump() {
         m.buttonCD_jump = m.cycle; //can't jump again until 20 cycles pass
@@ -354,56 +393,83 @@ const m = {
     switchWorlds(giveTech = "") {
         if (!m.isSwitchingWorlds) {
             let totalTech = 0;
-            const addBack = []
-            for (let i = tech.tech.length - 1; i > -1; i--) {
-                if (tech.tech[i].count > 0 && !tech.tech[i].isLore && !tech.tech[i].isNonRefundable) {
-                    if (tech.tech[i].isAltRealityTech) {
-                        addBack.push(tech.tech[i].name)
-                    } else {
-                        totalTech += tech.tech[i].count
-                    }
-                }
-            }
+            const keep = tech.nonDemolition //localization: your "field", "gun", or other "tech" don't change
             powerUps.boost.endCycle = 0
             simulation.isTextLogOpen = false; //prevent console spam
-            tech.resetAllTech()
-            // if (giveTech) tech.giveTech(giveTech) //give many worlds back
-            for (let i = 0; i < addBack.length; i++) tech.giveTech(addBack[i])
+            if (keep) {
+                //only remove the tech that aren't kept, giving kept tech back would repeat their one time effects
+                for (const t of tech.tech.slice()) {
+                    if (t.count > 0 && (t.isLore || (!t.isAltRealityTech && !tech.isNonDemolitionKept(t)))) {
+                        if (!t.isLore && !t.isNonRefundable) totalTech += t.count
+                        t.remove()
+                        if (!t.isInstant) tech.totalCount -= t.count
+                        t.count = 0
+                        if (tech.zeitgeistRemoveName === t.name) tech.zeitgeistRemoveName = null
+                    }
+                }
+                lore.techCount = 0
+                if (keep !== "tech") { //other tech are randomized, so also reset what they leave behind like resetAllTech does
+                    tech.duplication = 0
+                    tech.pauseEjectTech = 2
+                    powerUps.retainList = []
+                    powerUps.setPowerUpMode()
+                }
+            } else {
+                const addBack = []
+                for (let i = tech.tech.length - 1; i > -1; i--) {
+                    if (tech.tech[i].count > 0 && !tech.tech[i].isLore && !tech.tech[i].isNonRefundable) {
+                        if (tech.tech[i].isAltRealityTech) {
+                            addBack.push(tech.tech[i].name)
+                        } else {
+                            totalTech += tech.tech[i].count
+                        }
+                    }
+                }
+                tech.resetAllTech()
+                // if (giveTech) tech.giveTech(giveTech) //give many worlds back
+                for (let i = 0; i < addBack.length; i++) tech.giveTech(addBack[i])
+            }
 
             //remove all bullets
             for (let i = 0; i < bullet.length; ++i) Matter.Composite.remove(engine.world, bullet[i]);
             bullet = [];
 
             //randomize
-            powerUps.research.count = Math.floor(powerUps.research.count * (0.5 + 1.5 * Math.random()))
-            m.coupling = Math.floor(m.coupling * (0.5 + 1.5 * Math.random()))
+            if (keep !== "tech") powerUps.research.count = Math.floor(powerUps.research.count * (0.5 + 1.5 * Math.random()))
+            if (keep !== "field") m.coupling = Math.floor(m.coupling * (0.5 + 1.5 * Math.random()))
             //randomize health
             m.health = m.health * (1 + 0.5 * (Math.random() - 0.5))
             if (m.health > 1) m.health = 1;
             //randomize field
-            m.setField(Math.ceil(Math.random() * (m.fieldUpgrades.length - 1)))
-            //removes guns and ammo  
-            b.inventory = [];
-            b.activeGun = null;
-            b.inventoryGun = 0;
-            for (let i = 0, len = b.guns.length; i < len; ++i) {
-                b.guns[i].have = false;
-                if (b.guns[i].ammo !== Infinity) {
-                    b.guns[i].ammo = 0;
-                    b.guns[i].ammoPack = b.guns[i].defaultAmmoPack;
+            if (keep !== "field") {
+                const fields = [] //not field emitter or fields only found in lore
+                for (let i = 1; i < m.fieldUpgrades.length; i++) if (!m.fieldUpgrades[i].isLoreField) fields.push(i)
+                m.setField(fields[Math.floor(Math.random() * fields.length)])
+            }
+            if (keep !== "gun") {
+                //removes guns and ammo
+                b.inventory = [];
+                b.activeGun = null;
+                b.inventoryGun = 0;
+                for (let i = 0, len = b.guns.length; i < len; ++i) {
+                    b.guns[i].have = false;
+                    if (b.guns[i].ammo !== Infinity) {
+                        b.guns[i].ammo = 0;
+                        b.guns[i].ammoPack = b.guns[i].defaultAmmoPack;
+                    }
+                }
+                //give random guns
+                // const totalGuns = 1 + Math.floor(b.inventory.length * (0.5 + 1.5 * Math.random()))
+                const totalGuns = 1 + Math.floor(Math.random() * Math.random() * 7)
+                for (let i = 0; i < totalGuns; i++) b.giveGuns()
+
+                //randomize ammo based on ammo/ammoPack count
+                for (let i = 0, len = b.inventory.length; i < len; i++) {
+                    if (b.guns[b.inventory[i]].ammo !== Infinity) b.guns[b.inventory[i]].ammo = Math.floor(b.guns[b.inventory[i]].ammo * (0.25 + Math.random() + Math.random() + Math.random()))
                 }
             }
-            //give random guns
-            // const totalGuns = 1 + Math.floor(b.inventory.length * (0.5 + 1.5 * Math.random()))
-            const totalGuns = 1 + Math.floor(Math.random() * Math.random() * 7)
-            for (let i = 0; i < totalGuns; i++) b.giveGuns()
 
-            //randomize ammo based on ammo/ammoPack count
-            for (let i = 0, len = b.inventory.length; i < len; i++) {
-                if (b.guns[b.inventory[i]].ammo !== Infinity) b.guns[b.inventory[i]].ammo = Math.floor(b.guns[b.inventory[i]].ammo * (0.25 + Math.random() + Math.random() + Math.random()))
-            }
-
-            simulation.queueAction({ type: "reality tech", remaining: totalTech })
+            simulation.queueAction({ type: "reality tech", remaining: totalTech, keep })
 
             if (tech.isAltRealitySpawn) {
                 // powerUps.spawn(m.pos.x - 10, m.pos.y, powerUps.healGiveMaxEnergy ? "Casimir" : "heal", false)
@@ -476,6 +542,19 @@ const m = {
                     break
                 }
             }
+            for (let i = 0; i < tech.tech.length; i++) { //stops optimization from swapping back to eigenstate to revive your other state
+                if (tech.tech[i].name === "optimization") {
+                    powerUps.ejectTech(i, true)
+                    break
+                }
+            }
+        } else if (tech.isImmortal && tech.isImmortalRewind && saveGame.isRewindable()) { //self-locating uncertainty, load this level's checkpoint instead of an alternate reality
+            m.health = 1 //stay alive until the checkpoint loads
+            m.displayHealth()
+            saveGame.rewind(save => {
+                tech.isImmortalRewind = false //only works once, set after loading or the checkpoint would turn it back on
+                saveGame.pendingMessage = `<span class='color-var'>saveGame</span>.rewind() <em>//self-locating uncertainty</em>` //players can type this in the console too
+            })
         } else if (tech.isImmortal) { //if player has the immortality buff, spawn on the same level with randomized damage
             //remove immortality tech
             // for (let i = 0; i < tech.tech.length; i++) {
@@ -583,11 +662,17 @@ const m = {
             );
         }
     },
+    healthBarWidth(health) { //px width of a health bar, linear up to 1 health, then approaches the window width but never reaches it
+        if (health <= 1) return 300 * health
+        const fullWidth = Math.max(300, window.innerWidth - 30)
+        const extra = health - 1
+        return 300 + (fullWidth - 300) * extra / (extra + 4) //4 makes 7 health cover about 2/3 of the screen
+    },
     displayHealth() {
         let id
         id = document.getElementById("health");
         // health display is a x^1.5 rule to make it seem like the player has lower health 
-        id.style.width = Math.floor(300 * m.maxHealth * Math.pow(Math.max(0, m.health) / m.maxHealth, 1.4)) + "px";
+        id.style.width = Math.floor(m.healthBarWidth(m.maxHealth) * Math.pow(Math.max(0, m.health) / m.maxHealth, 1.4)) + "px";
         if (m.health < 0) {
             id.style.borderRightColor = "#f00"
         } else if (m.health === m.maxHealth) {
@@ -623,8 +708,8 @@ const m = {
             m.maxHealth *= scale
         }
 
-        document.getElementById("health-bg").style.width = `${Math.floor(300 * m.maxHealth)}px`
-        document.getElementById("defense-bar").style.width = Math.max(0, Math.floor(300 * m.maxHealth * (1 - m.defense()))) + "px";
+        document.getElementById("health-bg").style.width = `${Math.floor(m.healthBarWidth(m.maxHealth))}px`
+        document.getElementById("defense-bar").style.width = Math.max(0, Math.floor(m.healthBarWidth(m.maxHealth) * (1 - m.defense()))) + "px";
 
         if (isMessage) simulation.inGameConsole(`<span class='color-var'>m</span>.<span class='color-h' data-help='health'>maxHealth</span> <span class='color-symbol'>=</span> ${m.maxHealth.toFixed(2)}`)
         if (m.health > m.maxHealth) m.health = m.maxHealth;
@@ -657,6 +742,7 @@ const m = {
         if (tech.isTurret && m.crouch) dmg *= 0.3;
         if (tech.isFirstDer && b.inventory[0] === b.activeGun) dmg *= 0.85 ** b.inventory.length
         if (tech.isScaleInvariance && player.scale < 1) dmg *= tech.isBijection ? 0.5 : 0.7
+        if (tech.isLargePortal) dmg *= 0.6
         if (tech.isLowHealthDefense) dmg *= Math.pow(0.2, Math.max(0, 1 - (tech.isEnergyHealth ? m.energy / m.maxEnergy : m.health / m.maxHealth)))
         if (tech.isRemineralize) {
             //reduce mineral percent based on time since last check
@@ -3428,6 +3514,8 @@ const m = {
             m.fieldRegen = 0.001334 //8 energy per second wormhole
         } else if (m.fieldMode === 10) {
             m.fieldRegen = 0.0015 //9 energy per second grappling hook
+        } else if (m.fieldMode === 11) {
+            m.fieldRegen = 0.001334 //8 energy per second portal
         } else {
             m.fieldRegen = 0.001 //6 energy per second
         }
@@ -4360,6 +4448,8 @@ const m = {
                 return `<span style = 'font-size:89%;'>after eating <strong class='block' data-help='block'>blocks</strong> <strong>+${(3 * couple).toFixed(0)}</strong> <strong class='energy' data-help='energy'>energy</strong></span>`
             case 10: //grappling hook
                 return `<span style="opacity: 1;">${powerUps.orb.ammo(1)}</span> give ${(5 * couple).toFixed(0)}% more ammo`
+            case 11: //portal
+                return `<span style = 'font-size:89%;'>after going through a ${m.fieldUpgrades[11].text()} <strong>+${couple.toFixed(0)}</strong> <strong class='energy' data-help='energy'>energy</strong></span>`
         }
     },
     couplingChange(change = 0) {
@@ -4392,6 +4482,7 @@ const m = {
             Matter.Composite.remove(engine.world, m.fieldUpgrades[8].collider);
             m.fieldUpgrades[8].collider = null
         }
+        m.fieldUpgrades[11].clear() //remove portals
 
         if (isNaN(index)) { //find index by name
             let found = false
@@ -4409,6 +4500,7 @@ const m = {
         m.setHoldDefaults();
         m.fieldUpgrades[index].effect();
         b.setFireCD() //time dilation's faster fire rate only applies while it's the field
+        b.setFireMethod() //the portal field uses the fire button
         simulation.inGameConsole(`${powerUps.orb.field()} <span class='color-var'>m</span>.setField("<strong class='color-text'>${m.fieldUpgrades[m.fieldMode].name}</strong>")<br>input.key.field<span class='color-symbol'>:</span> ["<span class='color-text'>MouseRight</span>"]`);
         if (m.fieldMode === 1) simulation.inGameConsole(`m<span class='color-symbol'>.</span>fieldUpgrades<span class='color-symbol'>[1]</span>energyHealthRatio <span class='color-symbol'>=</span> ${m.fieldUpgrades[1].energyHealthRatio} &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">←←↓→→↓</em>`);
         if (m.fieldMode === 2) simulation.inGameConsole(`m<span class='color-symbol'>.</span>fieldPosition<span class='color-symbol'>+=</span>10 &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">← → ← → ↧</em>`);
@@ -4419,6 +4511,7 @@ const m = {
         if (m.fieldMode === 7) simulation.inGameConsole(`<strong>4</strong><span class='color-symbol'>→</span><strong>5.5x</strong> <strong class='color-cloaked' data-help='cloaking'>decloaking</strong> <strong class='color-d' data-help='damage'>damage</strong> <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">↑↓←↓→</em>`);
         if (m.fieldMode === 8) simulation.inGameConsole(`Composite<span class='color-symbol'>.</span>add<span class='color-symbol'>(</span>engine.world<span class='color-symbol'>,</span> block<span class='color-symbol'>)</span> <em style ="float: right; font-family: monospace;font-size:1rem;color:#055;">↓↓→↓←↓↓</em>`);
         if (m.fieldMode === 9) simulation.inGameConsole(`simulation<span class='color-symbol'>.</span>setPosition<span class='color-symbol'>({</span>x<span class='color-symbol'>:</span>0<span class='color-symbol'>,</span> y<span class='color-symbol'>:</span>0<span class='color-symbol'>})</span> <em style ="float: right; font-family: monospace;font-size:1rem;color:#055;">↓↓↓↑↓</em>`);
+        if (m.fieldMode === 11) simulation.inGameConsole(`portals<span class='color-symbol'>.</span>isViewOn <span class='color-symbol'>=</span> ${m.fieldUpgrades[11].isPreview} &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #055;">↑↓↑↓↑</em>`);
         if (m.fieldMode === 10) simulation.inGameConsole(`Matter<span class='color-symbol'>.</span>Body<span class='color-symbol'>.</span>setPosition<span class='color-symbol'>(</span>player<span class='color-symbol'>,{</span>x<span class='color-symbol'>:</span>0<span class='color-symbol'>,</span>y<span class='color-symbol'>:</span>0<span class='color-symbol'>})</span> <em style ="float: right; font-family: monospace;font-size:1rem;color:#055;">↑↑↓↓</em>`);
     },
     fieldEvent: null,
@@ -4615,9 +4708,9 @@ const m = {
                                 // ctx.lineWidth = 1;
                                 // ctx.strokeStyle = "#f0f";
                                 // ctx.stroke();
-                                if (!input.down || Matter.Query.rayAny(map, upper, lower, 35)) simulation.removeEphemera(this)
-                                const unit = { x: Math.cos(m.fieldAngle), y: Math.sin(m.fieldAngle) }
-                                m.fieldPosition = Vector.add(m.fieldPosition, Vector.mult(unit, 10))
+                                if (!input.down || Matter.Query.rayAny(tech.isRay ? map.filter(who => !who.isRay) : map, upper, lower, 35)) simulation.removeEphemera(this) //tech: ray's own line isn't in the way
+                                m.fieldPosition.x += 10 * Math.cos(m.fieldAngle) //moved in place, so tech: ray still knows the player placed this field
+                                m.fieldPosition.y += 10 * Math.sin(m.fieldAngle)
                             },
                         })
 
@@ -4633,33 +4726,415 @@ const m = {
                 m.grabPowerUpRange2 = 10000000
                 m.fieldPosition = { x: m.pos.x, y: m.pos.y }
                 m.fieldAngle = m.angle
+                //versions of the field, tech picks which one is used in version()
+                //draw(where, angle, isAttached) draws the field and remembers its shape
+                //touch(position, radius) checks if a circle is touching the field, and returns null or how it gets pushed:
+                //unit points from the circle to the field, dist is how far outside the field the circle's center is, contact is where electricity starts, ice() is where ice IX forms
+                const versions = {
+                    membrane: { //the default, the field squishes against the map, ray casts find how far it can reach in each direction
+                        //each stack of tech: Meissner effect makes the field 1.35x bigger, 17° wider, and float better
+                        range(stacks) { return 185 * 1.48 ** stacks },
+                        arc(stacks) { return 0.35 + stacks * 11 / 360 }, //fraction of a full turn the field spans
+                        hover(stacks) { return 0.5 + 0.16 * stacks }, //upward push while falling with the field on, in units of gravity
+                        gap: 3, //the map pushes the field this far away from it
+                        rounding: 0.4, //radians, how far around the map the field curves
+                        softness: 4, //each field line follows a smoothed copy of the edge, deeper lines are smoother, in points along the edge
+                        lines: 5, //field lines behind the edge, each one closer to the player
+                        pointStep: 0.03, //radians between points along the edge
+                        rayStep: 0.05, //radians between rays, the rounding smooths out the space between them
+                        draw(where, angle, isAttached) {
+                            const range = m.fieldRange
+                            const halfArc = Math.PI * m.fieldArc
+                            const count = Math.ceil(2 * halfArc / this.pointStep) //points along the edge
+                            const step = 2 * halfArc / count
+                            const cos = Math.cos(angle)
+                            const sin = Math.sin(angle)
+                            const reach = range + this.gap
+                            const nearby = [] //map close enough to touch the field
+                            for (let i = 0, len = map.length; i < len; i++) {
+                                const bounds = map[i].bounds
+                                if (bounds.max.x > where.x - reach && bounds.min.x < where.x + reach && bounds.max.y > where.y - reach && bounds.min.y < where.y + reach) nearby.push(map[i])
+                            }
+
+                            //each point on the edge reaches as far as it can, then curves smoothly around anything closer nearby
+                            const edge = new Array(count + 1).fill(range) //radius of each point along the outer edge of the field
+                            if (nearby.length) {
+                                const dent = (a) => { //cast a ray at angle a, relative to the field's angle, and dent the edge points around it if it hits the map
+                                    const best = vertexCollision(where, { x: where.x + reach * Math.cos(angle + a), y: where.y + reach * Math.sin(angle + a) }, [nearby])
+                                    if (!best.who) return
+                                    const depth = range - Math.max(0, Math.sqrt(best.dist2) - this.gap)
+                                    const first = Math.max(0, Math.ceil((a - this.rounding + halfArc) / step))
+                                    const last = Math.min(count, Math.floor((a + this.rounding + halfArc) / step))
+                                    for (let i = first; i <= last; i++) {
+                                        const da = (-halfArc + i * step - a) / this.rounding
+                                        const bump = (1 - da * da) * (1 - da * da) //1 at the ray, smoothly down to 0 at rounding
+                                        const d = range - depth * bump
+                                        if (d < edge[i]) edge[i] = d
+                                    }
+                                }
+                                const rays = Math.ceil((2 * halfArc + 2 * this.rounding) / this.rayStep) //map just past the edges of the field still bends it
+                                for (let i = 0; i <= rays; i++) dent(-halfArc - this.rounding + i * (2 * halfArc + 2 * this.rounding) / rays)
+                                for (let i = 0, len = nearby.length; i < len; i++) { //rays just to each side of corners, so the field moves smoothly around them
+                                    const vertices = nearby[i].vertices
+                                    for (let j = 0, vLen = vertices.length; j < vLen; j++) {
+                                        const dx = vertices[j].x - where.x
+                                        const dy = vertices[j].y - where.y
+                                        if (dx * dx + dy * dy > reach * reach) continue
+                                        const a = Math.atan2(dy * cos - dx * sin, dx * cos + dy * sin) //the corner's angle, relative to the field's angle
+                                        if (Math.abs(a) < halfArc + this.rounding) {
+                                            dent(a - 0.001)
+                                            dent(a + 0.001)
+                                        }
+                                    }
+                                }
+                            }
+
+                            //draw
+                            const dirX = [] //direction from the center to each point along the edge
+                            const dirY = []
+                            const turnCos = Math.cos(step)
+                            const turnSin = Math.sin(step)
+                            dirX[0] = Math.cos(angle - halfArc)
+                            dirY[0] = Math.sin(angle - halfArc)
+                            for (let i = 1; i <= count; i++) { //each point turns the last one by a step
+                                dirX[i] = dirX[i - 1] * turnCos - dirY[i - 1] * turnSin
+                                dirY[i] = dirY[i - 1] * turnCos + dirX[i - 1] * turnSin
+                            }
+                            const total = [0] //running total of the edge, for smoothing
+                            for (let i = 0; i <= count; i++) total[i + 1] = total[i] + edge[i]
+                            const smooth = (i, w) => { //average of the edge within w points of i, past the ends counts as the end point
+                                const lo = i - w
+                                const hi = i + w
+                                let sum = total[Math.min(count, hi) + 1] - total[Math.max(0, lo)]
+                                if (lo < 0) sum -= lo * edge[0]
+                                if (hi > count) sum += (hi - count) * edge[count]
+                                return sum / (2 * w + 1)
+                            }
+                            const chord = [] //how far out the straight line between the two ends of the field is in each direction, as a fraction of the edge
+                            for (let i = 0; i <= count; i++) chord[i] = Math.cos(halfArc) / Math.cos(-halfArc + i * step)
+                            const isDim = isAttached && m.holdingTarget //dimmer when a block is in reach
+                            const color = "0, 115, 239"//"91, 158, 230"//"110,180,255"
+                            // "rgb(0, 115, 239)"
+                            ctx.lineWidth = 2;
+                            for (let k = 1; k <= this.lines; k++) { //field lines, they all meet at the ends of the field like lines between two poles
+                                const f = k / (this.lines + 1) //0 at the edge, 1 at the straight line between the ends
+                                ctx.beginPath();
+                                for (let i = 0; i <= count; i++) {
+                                    const r = Math.min(edge[i], smooth(i, k * this.softness) * (1 - f + f * chord[i]))
+                                    ctx.lineTo(where.x + r * dirX[i], where.y + r * dirY[i])
+                                }
+                                // console.log(f)
+                                ctx.strokeStyle = `rgba(${color}, ${(isDim ? 0.25 : 0.55) * (1 - 0.9 * f)})`
+                                ctx.stroke();
+                            }
+                            ctx.lineWidth = 4; //the edge
+                            ctx.strokeStyle = `rgba(${color}, ${isDim ? 0.35 + 0.05 * Math.random() : 0.4 + 0.5 * Math.random()})`
+                            ctx.beginPath();
+                            for (let i = 0; i <= count; i++) ctx.lineTo(where.x + edge[i] * dirX[i], where.y + edge[i] * dirY[i])
+                            ctx.stroke();
+                        },
+                        touch(position, radius) { //the whole circle the field could reach, without the dents
+                            const sub = Vector.sub(position, m.fieldPosition)
+                            const out = Vector.normalise(sub)
+                            const dist = Vector.magnitude(sub) - m.fieldRange
+                            if (dist > radius || Vector.dot({ x: Math.cos(m.fieldAngle), y: Math.sin(m.fieldAngle) }, out) <= m.fieldThreshold || Matter.Query.rayAny(map, position, m.fieldPosition)) return null
+                            return {
+                                unit: Vector.neg(out),
+                                dist,
+                                contact: m.fieldPosition,
+                                ice() {
+                                    const angle = m.fieldAngle + 4 * m.fieldArc * (Math.random() - 0.5)
+                                    const r = m.fieldRange * (0.6 + 0.3 * Math.random())
+                                    return { angle, position: Vector.add(m.fieldPosition, { x: r * Math.cos(angle), y: r * Math.sin(angle) }) }
+                                }
+                            }
+                        },
+                    },
+                    ray: { //tech: ray, a straight line in front of the eye that stops flush against the map
+                        lengths: [1, 1.5, 2.5, 5], //tech: Meissner effect, how many times longer the line is for 0 to 3 stacks
+                        farther: 0.2, //only this part of the extra length moves the line farther from the eye, the rest makes it span a wider arc
+                        base: null,
+                        shape(stacks) { //distance from the eye to the middle of the line, and half the line's length
+                            if (!this.base) { //without tech the line is as wide as rays spread across a 0.35 arc would reach on average, and far enough away that evenly spaced spots on it average 180 from the eye
+                                const n = this.rays
+                                const halfArc = Math.PI * 0.35
+                                let spread = 0 //half the line's length compared to its distance from the eye
+                                let even = 0
+                                for (let i = 0; i < n; i++) {
+                                    const u = 2 * i / (n - 1) - 1 //-1 to 1 along the line
+                                    spread += Math.abs(Math.tan(halfArc * u))
+                                    even += Math.abs(u)
+                                }
+                                spread /= even
+                                let sum = 0
+                                for (let i = 0; i < n; i++) sum += Math.hypot(1, spread * (2 * i / (n - 1) - 1))
+                                const distance = 180 * n / sum
+                                this.base = { distance, halfLength: distance * spread }
+                            }
+                            const length = this.lengths[Math.min(stacks, 3)]
+                            return { distance: this.base.distance * (1 + this.farther * (length - 1)), halfLength: this.base.halfLength * length }
+                        },
+                        range(stacks) { //average distance from the eye to spots along the line
+                            const { distance, halfLength } = this.shape(stacks)
+                            let sum = 0
+                            for (let i = 0; i < this.rays; i++) sum += Math.hypot(distance, halfLength * (2 * i / (this.rays - 1) - 1))
+                            return sum / this.rays
+                        },
+                        arc(stacks) { //fraction of a full turn the line spans, seen from the eye, a longer line spans a wider arc
+                            const { distance, halfLength } = this.shape(stacks)
+                            const base = this.shape(0)
+                            return 0.35 + (Math.atan2(halfLength, distance) - Math.atan2(base.halfLength, base.distance)) / Math.PI
+                        },
+                        hover() { return 0 }, //the line doesn't float
+                        rays: 15, //spots along the line the eye checks to see which parts of the line it can see
+                        growTime: 10, //cycles for the line to shoot out after the field button is pressed
+                        growth: 1, //how far out the line has shot while the field button is down, 0 to 1
+                        growCycle: 0,
+                        drawCycle: 0, //touch() only uses the line if it was drawn this cycle
+                        pieces: [], //the straight pieces of the line drawn this cycle, { a, b } are the ends
+                        origin: null, //the eye the line was drawn from
+                        reach: 0, //distance from the eye to the ends of the line
+                        solid: [], //the map without the line's own walls, for line of sight
+                        lineWidth: 3,
+                        band: 17, //width of the faded band on the eye's side of the line left behind after releasing the field, the band and the line are a wall you can stand on
+                        walls: [], //map bodies under the line left behind, they collide with the player, bullets, and lasers
+                        wallKey: "", //where the walls were made, so they are only remade when the line moves
+                        wallMap: null, //levels that rebuild the map replace the map array, which removes the walls
+                        wallCycle: 0,
+                        wallWatcher: null,
+                        placed: null, //m.fieldPosition when the player last released the field, only a line the player placed is left behind, not one placed by a new level or a new field
+                        setWalls(pieces, eye) {
+                            this.wallCycle = m.cycle
+                            if (this.wallMap !== map) { //the old walls went with the old map
+                                this.wallMap = map
+                                this.walls = []
+                                this.wallKey = ""
+                            }
+                            let key = ""
+                            for (const { a, b } of pieces) key += `${Math.round(a.x)},${Math.round(a.y)},${Math.round(b.x)},${Math.round(b.y)} `
+                            if (key === this.wallKey) return
+                            this.clearWalls()
+                            this.wallKey = key
+                            for (const { a, b } of pieces) {
+                                const dx = b.x - a.x
+                                const dy = b.y - a.y
+                                const length = Math.sqrt(dx * dx + dy * dy)
+                                if (length < 1) continue
+                                const thickness = this.band + this.lineWidth / 2 //from the far edge of the line to the inside edge of the band
+                                const shift = (eye.x - a.x) * dy - (eye.y - a.y) * dx > 0 ? 0.5 * (this.band - this.lineWidth / 2) / length : -0.5 * (this.band - this.lineWidth / 2) / length //toward the eye
+                                const who = Bodies.rectangle((a.x + b.x) / 2 + dy * shift, (a.y + b.y) / 2 - dx * shift, length, thickness, {
+                                    angle: Math.atan2(dy, dx),
+                                    isStatic: true,
+                                    collisionFilter: { category: cat.map, mask: cat.player | cat.bullet | cat.mobBullet }, //lasers find it in map, mobs and blocks pass through
+                                    isRay: true,
+                                })
+                                if (Matter.Query.collides(who, [playerBody, playerHead]).some(hit => hit.depth > 15)) { //never make a wall inside the player, try again next cycle, standing on it or the line moving into the player a little is fine
+                                    this.wallKey = ""
+                                    continue
+                                }
+                                Composite.add(engine.world, who)
+                                map.push(who)
+                                this.walls.push(who)
+                            }
+                            if (!simulation.ephemera.includes(this.wallWatcher)) {
+                                const ray = this
+                                this.wallWatcher = { //removes the walls when the line isn't left behind anymore, like after switching fields
+                                    name: "ray walls",
+                                    do() {
+                                        if (ray.wallCycle < m.cycle - 1) {
+                                            ray.clearWalls()
+                                            simulation.removeEphemera(this)
+                                        }
+                                    },
+                                }
+                                simulation.ephemera.push(this.wallWatcher)
+                            }
+                        },
+                        clearWalls() {
+                            for (const who of this.walls) {
+                                Composite.remove(engine.world, who)
+                                const index = map.indexOf(who)
+                                if (index !== -1) map.splice(index, 1)
+                            }
+                            this.walls = []
+                            this.wallKey = ""
+                        },
+                        draw(center, angle, isAttached) {
+                            if (!isAttached && this.placed !== m.fieldPosition) { //nothing is left behind until the player places a line, so every line you see is solid
+                                this.clearWalls()
+                                return
+                            }
+                            const cos = Math.cos(angle)
+                            const sin = Math.sin(angle)
+                            const eye = 15 * player.scale
+                            const where = { x: center.x + eye * cos, y: center.y + eye * sin } //everything comes out of the player's eye
+                            const n = this.rays
+                            if (isAttached) { //the line shoots out when the field button is pressed
+                                if (this.growCycle !== m.cycle - 1) this.growth = 0
+                                this.growCycle = m.cycle
+                                this.growth = Math.min(1, this.growth + 1 / this.growTime)
+                            }
+                            const growth = isAttached ? this.growth : 1 //the field left behind after releasing is always full size
+                            const { distance, halfLength } = this.shape(tech.meissnerCount)
+                            const spread = halfLength / distance //half the line's length compared to its distance from the eye
+                            const lineDist = distance * growth //distance from the eye to the line
+                            const reach = lineDist * Math.hypot(1, spread) //distance from the eye to the ends of the line
+                            const nearby = [] //map close enough to touch the field
+                            for (let i = 0, len = map.length; i < len; i++) {
+                                const bounds = map[i].bounds
+                                if (bounds.max.x > where.x - reach && bounds.min.x < where.x + reach && bounds.max.y > where.y - reach && bounds.min.y < where.y + reach && !map[i].isRay) nearby.push(map[i])
+                            }
+                            const start = { x: where.x + lineDist * (cos + spread * sin), y: where.y + lineDist * (sin - spread * cos) } //the ends of the line
+                            const end = { x: where.x + lineDist * (cos - spread * sin), y: where.y + lineDist * (sin + spread * cos) }
+                            const dx = end.x - start.x
+                            const dy = end.y - start.y
+                            const at = (t) => ({ x: start.x + t * dx, y: start.y + t * dy }) //t is 0 to 1 along the line
+
+                            //cut the line where it goes in and out of the map
+                            const cuts = [0]
+                            if (nearby.length) {
+                                const step = 0.5 / Math.sqrt(dx * dx + dy * dy) //half a px, to start the next cast just past the last one
+                                for (let t = 0, k = 0; t < 1 && k < 30; k++) {
+                                    const best = vertexCollision(at(t), end, [nearby])
+                                    if (!best.who) break
+                                    t = ((best.x - start.x) * dx + (best.y - start.y) * dy) / (dx * dx + dy * dy)
+                                    cuts.push(t)
+                                    t += step
+                                }
+                            }
+                            cuts.push(1)
+                            //a stretch of the line outside the map is drawn if the eye can see a spot on it
+                            const pieces = []
+                            for (let k = 0; k < cuts.length - 1; k++) {
+                                const a = cuts[k]
+                                const b = cuts[k + 1]
+                                if (nearby.length && Matter.Query.point(nearby, at((a + b) / 2)).length) continue //inside the map
+                                for (let i = Math.ceil(a * (n - 1)); i <= b * (n - 1); i++) {
+                                    if (!nearby.length || !vertexCollision(where, at(i / (n - 1)), [nearby]).who) {
+                                        pieces.push({ a: at(a), b: at(b) })
+                                        break
+                                    }
+                                }
+                            }
+                            if (isAttached) {
+                                this.clearWalls()
+                                this.placed = m.fieldPosition
+                            } else {
+                                this.setWalls(pieces, where)
+                            }
+                            this.drawCycle = m.cycle
+                            this.pieces = pieces
+                            this.origin = where
+                            this.reach = reach
+                            this.solid = this.walls.length ? map.filter(who => !who.isRay) : map
+
+                            //draw
+                            const color = m.fieldMeterColor //the line matches the energy bar
+                            const fromEye = (p) => { //the edge of the eye, on the way to p
+                                const sx = p.x - where.x
+                                const sy = p.y - where.y
+                                const scale = 4 * player.scale / Math.sqrt(sx * sx + sy * sy)
+                                return { x: where.x + sx * scale, y: where.y + sy * scale }
+                            }
+                            for (const { a, b } of pieces) {
+                                ctx.beginPath();
+                                if (isAttached) { //while the field button is down, fill from the eye out to the line
+                                    const first = fromEye(a)
+                                    const last = fromEye(b)
+                                    ctx.moveTo(first.x, first.y)
+                                    ctx.lineTo(a.x, a.y)
+                                    ctx.lineTo(b.x, b.y)
+                                    ctx.lineTo(last.x, last.y)
+                                    ctx.fillStyle = "rgba(91, 151, 255, 0.12)"
+                                } else { //a faded band on the inside of the line of the field left behind, so the solid edge faces the way the field pushes
+                                    const length = Math.hypot(b.x - a.x, b.y - a.y)
+                                    const sign = (where.x - a.x) * (a.y - b.y) + (where.y - a.y) * (b.x - a.x) > 0 ? this.band / length : -this.band / length //toward the eye
+                                    const nx = (a.y - b.y) * sign
+                                    const ny = (b.x - a.x) * sign
+                                    ctx.moveTo(a.x, a.y)
+                                    ctx.lineTo(b.x, b.y)
+                                    ctx.lineTo(b.x + nx, b.y + ny)
+                                    ctx.lineTo(a.x + nx, a.y + ny)
+                                    ctx.fillStyle = "rgba(116, 167, 255, 0.25)"
+                                }
+                                ctx.fill();
+                            }
+                            ctx.beginPath(); //the line
+                            for (const { a, b } of pieces) {
+                                ctx.moveTo(a.x, a.y)
+                                ctx.lineTo(b.x, b.y)
+                            }
+                            ctx.strokeStyle = color
+                            ctx.globalAlpha = isAttached && m.holdingTarget ? 0.35 + 0.05 * Math.random() : 0.4 + 0.5 * Math.random() //same flicker as the original field, dimmer when a block is in reach
+                            ctx.lineWidth = this.lineWidth;
+                            ctx.stroke();
+                            ctx.globalAlpha = 1
+                        },
+                        touch(position, radius) { //each piece of the line checks for a circle in the wedge between the eye and the piece, touching the piece or inside it
+                            if (this.drawCycle !== m.cycle) return null
+                            const o = this.origin
+                            const x = position.x - o.x
+                            const y = position.y - o.y
+                            if (x * x + y * y > (this.reach + radius) * (this.reach + radius)) return null //too far away to touch the line
+                            for (const { a: p, b: q } of this.pieces) {
+                                const px = p.x - o.x
+                                const py = p.y - o.y
+                                const qx = q.x - o.x
+                                const qy = q.y - o.y
+                                const turn = px * qy - py * qx
+                                if (Math.abs(turn) < 1e-6) continue
+                                if ((px * y - py * x) * turn < 0 || (x * qy - y * qx) * turn < 0) continue //not between this edge's rays
+                                const ex = q.x - p.x
+                                const ey = q.y - p.y
+                                const length = Math.sqrt(ex * ex + ey * ey)
+                                const sign = ey * px - ex * py > 0 ? 1 : -1
+                                const nx = sign * ey / length //normal pointing out, the way the edge pushes
+                                const ny = -sign * ex / length
+                                const dist = (position.x - p.x) * nx + (position.y - p.y) * ny //how far outside the edge, negative is inside
+                                if (dist > radius) continue
+                                const t = Math.max(0, Math.min(1, ((position.x - p.x) * ex + (position.y - p.y) * ey) / (length * length)))
+                                const contact = { x: p.x + t * ex, y: p.y + t * ey } //closest point on the edge
+                                if (Matter.Query.rayAny(this.solid, position, { x: contact.x - nx, y: contact.y - ny })) continue
+                                return {
+                                    unit: { x: -nx, y: -ny },
+                                    contact,
+                                    dist,
+                                    ice() { //along the edge, flying out
+                                        const s = 0.2 + 0.6 * Math.random()
+                                        return {
+                                            angle: Math.atan2(ny, nx) + 1.4 * (Math.random() - 0.5),
+                                            position: { x: p.x + s * ex - 10 * nx, y: p.y + s * ey - 10 * ny }
+                                        }
+                                    }
+                                }
+                            }
+                            return null
+                        },
+                    },
+                }
+                const version = () => tech.isRay ? versions.ray : versions.membrane
+                m.fieldUpgrades[2].rayLength = (stacks) => 2 * versions.ray.shape(stacks).halfLength //for tech: Meissner effect's description
+                m.fieldUpgrades[2].rayWalls = () => versions.ray.walls //for mob lasers that don't check the map
                 m.perfectPush = (isFree = false) => {
                     if (m.fieldCDcycle < m.cycle) {
+                        const current = version()
                         for (let i = 0, len = mob.length; i < len; ++i) {
-                            if (
-                                Vector.magnitude(Vector.sub(mob[i].position, m.fieldPosition)) - mob[i].radius < m.fieldRange &&
-                                !mob[i].isUnblockable &&
-                                Vector.dot({ x: Math.cos(m.fieldAngle), y: Math.sin(m.fieldAngle) }, Vector.normalise(Vector.sub(mob[i].position, m.fieldPosition))) > m.fieldThreshold &&
-                                !Matter.Query.rayAny(map, mob[i].position, m.fieldPosition)
-                            ) {
+                            const hit = !mob[i].isUnblockable && current.touch(mob[i].position, mob[i].radius)
+                            if (hit) {
                                 mob[i].locatePlayer();
-                                const unit = Vector.normalise(Vector.sub(m.fieldPosition, mob[i].position))
+                                const unit = hit.unit
                                 m.fieldCDcycle = m.cycle + m.fieldBlockCD + (mob[i].isShielded ? 10 : 0);
                                 if (!mob[i].isInvulnerable && bullet.length < 250) { //0.1 ice IX per coupling
                                     for (let i = 0, len = Math.ceil(0.1 * m.coupling); i < len; i++) {
                                         if (0.1 * m.coupling - i > Math.random()) {
-                                            const angle = m.fieldAngle + 4 * m.fieldArc * (Math.random() - 0.5)
-                                            const radius = m.fieldRange * (0.6 + 0.3 * Math.random())
-                                            b.iceIX(6 + 6 * Math.random(), angle, Vector.add(m.fieldPosition, {
-                                                x: radius * Math.cos(angle),
-                                                y: radius * Math.sin(angle)
-                                            }))
+                                            const ice = hit.ice()
+                                            b.iceIX(6 + 6 * Math.random(), ice.angle, ice.position)
                                         }
                                     }
                                 }
                                 if (tech.deflectDmg) { //electricity
-                                    m.deflectDamage(mob[i], m.fieldPosition, unit)
-                                } else if (isFree) {
+                                    m.deflectDamage(mob[i], hit.contact, unit)
+                                } else {
                                     ctx.lineWidth = 2; //when blocking draw this graphic
                                     ctx.fillStyle = `rgba(110,150,220, ${0.2 + 0.4 * Math.random()})`
                                     ctx.strokeStyle = "#000";
@@ -4673,26 +5148,6 @@ const m = {
                                     ctx.lineTo(mob[i].vertices[len].x + mag * (Math.random() - 0.5), mob[i].vertices[len].y + mag * (Math.random() - 0.5))
                                     ctx.fill();
                                     ctx.stroke();
-                                } else {
-                                    const eye = 15; //when blocking draw this graphic
-                                    const len = mob[i].vertices.length - 1;
-                                    ctx.lineWidth = 1;
-                                    ctx.fillStyle = `rgba(110,150,220, ${0.2 + 0.4 * Math.random()})`
-                                    ctx.strokeStyle = "#000";
-                                    ctx.beginPath();
-                                    ctx.moveTo(m.fieldPosition.x + eye * Math.cos(m.fieldAngle), m.fieldPosition.y + eye * Math.sin(m.fieldAngle));
-                                    ctx.lineTo(mob[i].vertices[len].x, mob[i].vertices[len].y);
-                                    ctx.lineTo(mob[i].vertices[0].x, mob[i].vertices[0].y);
-                                    ctx.fill();
-                                    ctx.stroke();
-                                    for (let j = 0; j < len; j++) {
-                                        ctx.beginPath();
-                                        ctx.moveTo(m.fieldPosition.x + eye * Math.cos(m.fieldAngle), m.fieldPosition.y + eye * Math.sin(m.fieldAngle));
-                                        ctx.lineTo(mob[i].vertices[j].x, mob[i].vertices[j].y);
-                                        ctx.lineTo(mob[i].vertices[j + 1].x, mob[i].vertices[j + 1].y);
-                                        ctx.fill();
-                                        ctx.stroke();
-                                    }
                                 }
                                 m.bulletsToBlocks(mob[i])
                                 if (tech.stunField) mobs.statusStun(mob[i], tech.stunField)
@@ -4720,19 +5175,11 @@ const m = {
 
                         //deflect player with tech
                         if (isFree && tech.isPerfectBrake) {
-                            const sub = Vector.sub(m.pos, m.fieldPosition)
-                            const unit = Vector.normalise(sub)
-                            if (
-                                Vector.magnitude(sub) - 30 < m.fieldRange &&
-                                Vector.magnitude(sub) + 130 > m.fieldRange &&
-                                !Matter.Query.rayAny(map, m.pos, m.fieldPosition) &&
-                                Vector.dot({ x: Math.cos(m.fieldAngle), y: Math.sin(m.fieldAngle) }, unit) > m.fieldThreshold
-                            ) {
+                            const hit = current.touch(m.pos, 30)
+                            if (hit && hit.dist > -130) { //only near the edge of the field
                                 m.fieldCDcycle = m.cycle + m.fieldBlockCD
-                                const mag = 30
-                                const add = { x: mag * Math.cos(m.fieldAngle), y: mag * Math.sin(m.fieldAngle) }
-                                const v = Vector.mult(Vector.normalise(Vector.add(add, player.velocity)), Math.max(40, player.speed))
-                                Matter.Body.setVelocity(player, v);
+                                const launch = Vector.add(Vector.mult(hit.unit, -30), player.velocity) //launch the way the field pushes
+                                Matter.Body.setVelocity(player, Vector.mult(Vector.normalise(launch), Math.max(40, player.speed)));
                             }
 
                             //deflect blocks
@@ -4769,9 +5216,10 @@ const m = {
                     }
                 }
                 m.hold = function () {
-                    const wave = Math.sin(m.cycle * 0.022);
-                    m.fieldRange = 180 + 12 * wave + 100 * tech.isBigField
-                    m.fieldArc = 0.35 + 0.045 * wave + 0.065 * tech.isBigField //run calculateFieldThreshold after setting fieldArc, used for powerUp grab and mobPush with lookingAt(mob)
+                    const current = version()
+                    const hover = current.hover(tech.meissnerCount)
+                    m.fieldRange = current.range(tech.meissnerCount)
+                    m.fieldArc = current.arc(tech.meissnerCount) //run calculateFieldThreshold after setting fieldArc, used for powerUp grab and mobPush with lookingAt(mob)
                     m.calculateFieldThreshold();
                     if (m.isHolding) {
                         m.drawHold(m.holdingTarget);
@@ -4782,15 +5230,16 @@ const m = {
                         const angleReduction = 0.5 + 0.7 * (Math.PI / 2 - Math.min(Math.PI / 2, Math.abs(m.angle + Math.PI / 2)))
 
                         if (player.velocity.y > 1) {
-                            player.force.y -= angleReduction * (tech.isBigField ? 0.95 : 0.5) * player.mass * simulation.g;
-
-                            const pushX = 0.0007 * angleReduction * player.mass
-                            if (player.velocity.x > 0.5) {
-                                player.force.x += pushX
-                            } else if (player.velocity.x < -0.5) {
-                                player.force.x -= pushX
+                            if (hover) {
+                                player.force.y -= angleReduction * hover * player.mass * simulation.g;
+                                const pushX = 0.0007 * angleReduction * player.mass
+                                if (player.velocity.x > 0.5) {
+                                    player.force.x += pushX
+                                } else if (player.velocity.x < -0.5) {
+                                    player.force.x -= pushX
+                                }
+                                Matter.Body.setVelocity(player, { x: player.velocity.x, y: 0.98 * player.velocity.y });
                             }
-                            Matter.Body.setVelocity(player, { x: player.velocity.x, y: 0.98 * player.velocity.y });
                             if (tech.isFloatEnergy) {
                                 m.addEnergy(12 * m.fieldRegen * level.isReducedRegen);
                                 if (!(simulation.cycle % 6)) simulation.energyGenGraphic()
@@ -4803,30 +5252,7 @@ const m = {
                         m.fieldPosition = { x: m.pos.x, y: m.pos.y }
                         m.fieldAngle = m.angle
 
-                        //draw field attached to player
-                        if (m.holdingTarget) {
-                            ctx.fillStyle = `rgba(110,150,220, ${0.06 + 0.03 * Math.random()})`
-                            ctx.strokeStyle = `rgba(110,150,220, ${0.35 + 0.05 * Math.random()})`
-                        } else {
-                            ctx.fillStyle = `rgba(110,150,220, ${0.27 + 0.2 * Math.random() - 0.1 * wave})`
-                            ctx.strokeStyle = `rgba(110,150,220, ${0.4 + 0.5 * Math.random()})`
-                        }
-                        ctx.beginPath();
-                        ctx.arc(m.pos.x, m.pos.y, m.fieldRange, m.angle - Math.PI * m.fieldArc, m.angle + Math.PI * m.fieldArc, false);
-                        ctx.lineWidth = 2.5 - 1.5 * wave;
-                        ctx.stroke();
-                        const curve = 0.57 + 0.04 * wave
-                        const aMag = (1 - curve * 1.2) * Math.PI * m.fieldArc
-                        let a = m.angle + aMag
-                        let cp1x = m.pos.x + curve * m.fieldRange * Math.cos(a)
-                        let cp1y = m.pos.y + curve * m.fieldRange * Math.sin(a)
-                        const r = 30 * player.scale
-                        ctx.quadraticCurveTo(cp1x, cp1y, m.pos.x + r * Math.cos(m.angle), m.pos.y + r * Math.sin(m.angle))
-                        a = m.angle - aMag
-                        cp1x = m.pos.x + curve * m.fieldRange * Math.cos(a)
-                        cp1y = m.pos.y + curve * m.fieldRange * Math.sin(a)
-                        ctx.quadraticCurveTo(cp1x, cp1y, m.pos.x + 1 * m.fieldRange * Math.cos(m.angle - Math.PI * m.fieldArc), m.pos.y + 1 * m.fieldRange * Math.sin(m.angle - Math.PI * m.fieldArc))
-                        ctx.fill();
+                        current.draw(m.pos, m.angle, true) //draw field attached to player
                         m.perfectPush();
 
                         if (tech.isThrowBlocks && input.down) {
@@ -4885,25 +5311,15 @@ const m = {
                     } else {
                         m.holdingTarget = null; //clears holding target (this is so you only pick up right after the field button is released and a hold target exists)
                         if (!input.field) { //&& tech.isFieldFree
-                            //draw field free of player
-                            ctx.fillStyle = `rgba(110,150,220, ${0.27 + 0.2 * Math.random() - 0.1 * wave})`
-                            ctx.strokeStyle = `rgba(110,180,255, ${0.4 + 0.5 * Math.random()})`
-                            ctx.beginPath();
-                            ctx.arc(m.fieldPosition.x, m.fieldPosition.y, m.fieldRange, m.fieldAngle - Math.PI * m.fieldArc, m.fieldAngle + Math.PI * m.fieldArc, false);
-                            ctx.lineWidth = 2.5 - 1.5 * wave;
-                            ctx.stroke();
-                            const curve = 0.8 + 0.06 * wave
-                            const aMag = (1 - curve * 1.2) * Math.PI * m.fieldArc
-                            let a = m.fieldAngle + aMag
-                            ctx.quadraticCurveTo(m.fieldPosition.x + curve * m.fieldRange * Math.cos(a), m.fieldPosition.y + curve * m.fieldRange * Math.sin(a), m.fieldPosition.x + 1 * m.fieldRange * Math.cos(m.fieldAngle - Math.PI * m.fieldArc), m.fieldPosition.y + 1 * m.fieldRange * Math.sin(m.fieldAngle - Math.PI * m.fieldArc))
-                            ctx.fill();
+                            current.draw(m.fieldPosition, m.fieldAngle, false) //draw field free of player
                             m.perfectPush(true);
                         }
                     }
                     // m.drawRegenEnergy()
                     m.drawRegenEnergy("rgba(0,0,0,0.2)")
                     if (tech.isPerfectBrake) { //cap mob speed around player
-                        const range = 100 + 90 * wave + 250 * m.energy
+                        const energy = m.energy > 1 ? 1 + 0.4 * Math.log(2.5 * m.energy - 1.5) : m.energy //diminishing returns above 100 energy, 1000 to 1100 energy adds about 10 radius
+                        const range = 100 + 250 * energy
                         for (let i = 0; i < mob.length; i++) {
                             const distance = Vector.magnitude(Vector.sub(m.pos, mob[i].position))
                             if (distance < range) {
@@ -4952,6 +5368,18 @@ const m = {
             },
             range() { //field size while drifting, used by negative pressure even when the field is off
                 return this.flightMode().drift.radius
+            },
+            drawRange(x, y, radius) { //zero-G range
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = "#f5f5ff";
+                ctx.globalCompositeOperation = "difference";
+                ctx.fill();
+                ctx.globalCompositeOperation = "source-over";
+            },
+            warmUp() { //see simulation.warmShaders
+                m.draw() //the range is drawn after other things in the same frame, which is a different shader than drawing it first
+                this.drawRange(m.pos.x, m.pos.y, 400)
             },
             zeroG(who, range, mag) { //lift nearby objects, and move them horizontally with the same force as the player
                 const range2 = range * range
@@ -5037,15 +5465,7 @@ const m = {
                             }
                             //add extra friction
                             Matter.Body.setVelocity(player, { x: player.velocity.x * 0.99, y: player.velocity.y * 0.98 });
-                            //draw zero-G range
-                            if (!simulation.isTimeSkipping) {
-                                ctx.beginPath();
-                                ctx.arc(m.pos.x, m.pos.y, m.fieldDrawRadius, 0, 2 * Math.PI);
-                                ctx.fillStyle = "#f5f5ff";
-                                ctx.globalCompositeOperation = "difference";
-                                ctx.fill();
-                                ctx.globalCompositeOperation = "source-over";
-                            }
+                            if (!simulation.isTimeSkipping) field.drawRange(m.pos.x, m.pos.y, m.fieldDrawRadius)
                         } else {
                             m.fieldDrawRadius = 0 //out of energy
                         }
@@ -5747,6 +6167,7 @@ const m = {
                     m.fieldFire = true;
                     m.isTimeDilated = false;
                     m.hold = function () {
+                        if (input.field && !m.isHolding) m.grabPowerUp(); //grab power ups even while out of energy or on cooldown
                         if (m.isHolding) {
                             m.wakeCheck();
                             m.drawHold(m.holdingTarget);
@@ -5755,7 +6176,6 @@ const m = {
                         } else if (input.field && m.fieldCDcycle < m.cycle) {
                             const drain = 0.0026 / (1 + 0.05 * m.coupling)
                             if (m.energy > drain) m.energy -= drain
-                            m.grabPowerUp();
                             m.lookForBlock();
                             if (m.energy > drain) {
                                 m.timeStop();
@@ -5789,6 +6209,7 @@ const m = {
             },
             keyLog: [null, null, null, null, null],
             smallFieldRadius: 110,
+            cloakRange: 155, //cloak size, separate from m.fieldRange so the deflecting field stays normal size
             effect: () => {
                 //store event function so it can be found and removed in m.setField()
                 m.fieldEvent = function (event) {
@@ -5814,6 +6235,7 @@ const m = {
                 m.fieldPhase = 0;
                 m.isCloak = false
                 m.fieldDrawRadius = 0
+                m.fieldUpgrades[7].cloakRange = m.fieldRange
                 m.isSneakAttack = true;
                 m.sneakAttackCycle = 0;
                 m.enterCloakCycle = 0;
@@ -5837,6 +6259,10 @@ const m = {
                         if (m.energy > m.fieldRegen) m.energy -= m.fieldRegen
                         m.grabPowerUp();
                         m.lookForBlock();
+                        if (m.energy > m.minEnergyToDeflect) { //deflect like the field emitter
+                            m.drawField();
+                            m.pushMobsFacing();
+                        }
                     } else if (m.holdingTarget && m.fieldCDcycle < m.cycle) { //holding target exists, and field button is not pressed
                         m.pickUp();
                     } else {
@@ -5879,18 +6305,19 @@ const m = {
                         }
                     }
 
+                    const field = m.fieldUpgrades[7]
                     if (m.isCloak) {
-                        m.fieldRange = m.fieldRange * 0.85 + m.fieldUpgrades[7].smallFieldRadius
-                        m.fieldDrawRadius = m.fieldRange * 1.1
+                        field.cloakRange = field.cloakRange * 0.85 + field.smallFieldRadius
+                        m.fieldDrawRadius = field.cloakRange * 1.1
                         m.drawCloak()
                         ctx.beginPath();
                         ctx.arc(m.pos.x, m.pos.y, 35 * player.scale, 0, 2 * Math.PI);
                         ctx.strokeStyle = "rgba(255,255,255,0.25)";
                         ctx.lineWidth = 10
                         ctx.stroke();
-                    } else if (m.fieldRange < 4000) {
-                        m.fieldRange += 90
-                        m.fieldDrawRadius = m.fieldRange
+                    } else if (field.cloakRange < 4000) {
+                        field.cloakRange += 90
+                        m.fieldDrawRadius = field.cloakRange
                         m.drawCloak()
                     }
                     if (tech.isIntangible) {
@@ -6212,6 +6639,53 @@ const m = {
                     simulation.inGameConsole(`<span class='color-var'>duplicationChance</span><span class='color-symbol'>++</span> <em>//${(tech.blockDupCount * 100).toFixed(0)}% for anyon</em>`);
                 }
             },
+            radiate(where) { //Hawking radiation, leave a radioactive zone where you entered the wormhole, based on neutron bomb
+                simulation.ephemera.push({
+                    onLevel: level.onLevel,
+                    position: { x: where.x, y: where.y },
+                    damageRadius: 100,
+                    maxDamageRadius: 350,
+                    do() {
+                        if (!m.alive || this.onLevel !== level.onLevel) {
+                            simulation.removeEphemera(this)
+                            return
+                        }
+                        if (!m.isTimeDilated) { //stay paused with bullets while time is frozen, like invariant
+                            this.damageRadius = this.damageRadius * 0.85 + 0.15 * this.maxDamageRadius //smooth radius towards max
+                            this.maxDamageRadius -= 1
+                            if (this.damageRadius < 15) {
+                                simulation.removeEphemera(this)
+                                return
+                            }
+                            //aoe damage to player
+                            if (Vector.magnitude(Vector.sub(player.position, this.position)) < this.damageRadius) {
+                                const DRAIN = (tech.isRadioactiveResistance ? 0.0025 * 0.2 : 0.0025)
+                                if (m.energy > DRAIN) {
+                                    if (m.immuneCycle < m.cycle) m.energy -= DRAIN
+                                } else {
+                                    m.energy = 0;
+                                    m.takeDamage((tech.isRadioactiveResistance ? 0.00016 * 0.2 : 0.00016) * tech.radioactiveDamage * spawn.dmgToPlayerByLevelsCleared())
+                                }
+                            }
+                            //aoe damage to mobs
+                            const dmg = 0.15 * tech.radioactiveDamage
+                            for (let i = 0, len = mob.length; i < len; i++) {
+                                if (Vector.magnitude(Vector.sub(mob[i].position, this.position)) < this.damageRadius + mob[i].radius) {
+                                    const mobDmg = Matter.Query.rayAny(map, mob[i].position, this.position) ? 0.2 * dmg : dmg //reduce damage if a wall is in the way
+                                    mob[i].damage(mob[i].shield ? mobDmg * 3 : mobDmg);
+                                    mob[i].locatePlayer();
+                                }
+                            }
+                        }
+                        ctx.beginPath();
+                        ctx.arc(this.position.x, this.position.y, this.damageRadius, 0, 2 * Math.PI);
+                        ctx.globalCompositeOperation = "lighter"
+                        ctx.fillStyle = `rgba(25,139,170,${0.2 + 0.06 * Math.random()})`;
+                        ctx.fill();
+                        ctx.globalCompositeOperation = "source-over"
+                    },
+                })
+            },
             descriptionFunction() {
                 return `use <strong>${(100 * this.energyCost()).toFixed(0)}</strong> <strong class='energy' data-help='energy'>energy</strong> to enter a <strong class='color-worm' data-help='wormhole'>wormhole</strong><br><strong>+8%</strong> chance to <strong class='color-dup' data-help='duplicate'>duplicate</strong> <strong>power ups</strong><br><strong>8</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↓↓↓↑↓</em>`
             },
@@ -6244,7 +6718,7 @@ const m = {
                 }
                 window.addEventListener("keydown", m.fieldEvent);
 
-                m.fieldMeterColor = "#ff8800"
+                m.fieldMeterColor = "#bbf"
                 m.duplicateChance = 0.08
                 m.fieldRange = 0
                 powerUps.setPowerUpMode(); //needed after adjusting duplication chance
@@ -6462,6 +6936,7 @@ const m = {
                                 m.hole.pos2.y = player.position.y
                                 m.hole.angle = Math.atan2(sub.y, sub.x)
                                 m.hole.unit = Vector.perp(Vector.normalise(sub))
+                                if (tech.isWormholeRadiation) m.fieldUpgrades[9].radiate(m.hole.pos1)
                                 if (tech.isNewWormHoleDamage) { //manifold, the boost is stored as an end cycle so it saves with the run
                                     tech.manifoldEnds = tech.manifoldEnds.filter(end => end > simulation.cycle)
                                     tech.manifoldEnds.push(simulation.cycle + 300)
@@ -6513,93 +6988,31 @@ const m = {
                             }
                         }
                     }
-                    m.drawRegenEnergy("rgba(0, 166, 187, 0.3)")
+                    m.drawRegenEnergy()
                 }
             },
         },
         {
             name: "grappling hook",
             descriptionFunction() {
-                return `use <strong class='energy' data-help='energy'>energy</strong> to fire a hook that <strong>pulls</strong> you<br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong><br><strong>9</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↑↓↓</em>`
+                return `use <strong class='energy' data-help='energy'>energy</strong> to fire a hook that <strong>pulls</strong> you<br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong><br><strong>9</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">←↓→→↓←</em>`
             },
-            keyLog: [null, null, null, null],
+            keyLog: [null, null, null, null, null, null],
             effect: () => {
                 //store event function so it can be found and removed in m.setField()
                 m.fieldEvent = function (event) {
+                    if (event.repeat) return //holding a key down doesn't count as pressing it again
                     m.fieldUpgrades[10].keyLog.shift() //remove first element
                     m.fieldUpgrades[10].keyLog.push(event.code) //add new key to end
-                    const patternA = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown"]
-                    const patternB = [input.key.up, input.key.up, input.key.down, input.key.down]
+                    const patternA = ["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowRight", "ArrowDown", "ArrowLeft"]
+                    const patternB = [input.key.left, input.key.down, input.key.right, input.key.right, input.key.down, input.key.left]
                     const arraysEqual = (a, b) => a.length === b.length && a.every((val, i) => val === b[i]);
-                    const drain = 0.13
-                    if (m.energy > drain && (arraysEqual(m.fieldUpgrades[10].keyLog, patternA) || arraysEqual(m.fieldUpgrades[10].keyLog, patternB))) {
-                        //↑↑↓↓ slam down to the ground below
-                        const rayResults = Matter.Query.ray([...map, ...body], m.pos, { x: m.pos.x, y: m.pos.y + 5000 }, 40);
-                        if (rayResults.length) {
-                            rayResults.sort((a, b) => a.body.position.y - b.body.position.y);
-                            const h = rayResults[0].body.bounds.min.y
-                            if (h - m.pos.y > 400) { //check if at least 400 above the ground
-                                m.energy -= drain
-                                const hLast = player.position.y
-                                const range = 0.05 * Math.min(h - hLast, 1500)
-                                const range2 = Math.min(h - hLast, 1500) * Math.min(h - hLast, 1500)
-                                simulation.ephemera.push({
-                                    count: 0, //cycles before it self removes
-                                    do() {
-                                        this.count++
-                                        if (this.count > 6) simulation.removeEphemera(this)
-
-                                        ctx.fillStyle = 'rgba(255,255,255,0.5)'
-                                        ctx.beginPath();
-
-                                        ctx.arc(m.pos.x, m.pos.y, range * this.count, 0, 2 * Math.PI);
-                                        ctx.lineWidth = 10;
-                                        ctx.fill();
-
-                                        ctx.beginPath();
-                                        ctx.moveTo(m.pos.x, hLast);
-                                        ctx.lineTo(m.pos.x, h - 90);
-                                        ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-                                        ctx.lineWidth = 40;
-                                        ctx.stroke();
-                                    },
-                                })
-                                Matter.Body.setPosition(player, { x: m.pos.x, y: h - 90 });
-                                Matter.Body.setVelocity(player, { x: player.velocity.x, y: 0 });
-                                input.field = false //force release grapple
-                                const immunity = Math.min(Math.floor(0.06 * (h - hLast)), 180)
-                                if (m.immuneCycle < m.cycle + immunity) m.immuneCycle = m.cycle + immunity; //immune for up to 3 seconds, longer falls give more
-
-                                m.doCrouch()
-                                m.yOff = m.yOffWhen.jump;
-                                m.hardLandCD = m.cycle + m.hardLandCDScale * Math.min(2 * m.hardLanding / 6.5 - 6, 40)
-
-                                //push away blocks, mobs
-                                const magX = 0.0015 * range
-                                const magY = 0.001 * range
-                                for (let i = 0, len = body.length; i < len; ++i) {
-                                    if (Vector.magnitudeSquared(Vector.sub(body[i].position, player.position)) < range2) {
-                                        body[i].force.x += magX * body[i].mass * (body[i].position.x > player.position.x ? 1 : -1)
-                                        body[i].force.y -= magY * body[i].mass
-                                    }
-                                }
-                                for (let i = 0, len = mob.length; i < len; ++i) {
-                                    if (Vector.magnitudeSquared(Vector.sub(mob[i].position, player.position)) < range2) {
-                                        mob[i].force.x += magX * mob[i].mass * (mob[i].position.x > player.position.x ? 1 : -1)
-                                        mob[i].force.y -= magY * mob[i].mass
-                                    }
-                                }
-                                //pull power ups in
-                                for (let i = 0, len = powerUp.length; i < len; ++i) {
-                                    if (Vector.magnitudeSquared(Vector.sub(powerUp[i].position, player.position)) < range2) {
-                                        powerUp[i].force.x -= magX * powerUp[i].mass * (powerUp[i].position.x > player.position.x ? 1 : -1)
-                                        powerUp[i].force.y += magY * powerUp[i].mass
-                                    }
-                                }
-                            } else {
-                                simulation.inGameConsole(`<em style ="color:#777;">//additional height required</em>`);
-                            }
-                        }
+                    if (m.fieldCDcycle < m.cycle && m.energy > 0.02 && !m.isHolding && !simulation.paused && !bullet.some(who => who.isSlack) && (arraysEqual(m.fieldUpgrades[10].keyLog, patternA) || arraysEqual(m.fieldUpgrades[10].keyLog, patternB))) {
+                        //←↓→→↓← fire a slack line that attaches without pulling until you press field
+                        m.energy -= 0.02
+                        const r = 40
+                        b.grapple({ x: m.pos.x + r * Math.cos(m.angle), y: m.pos.y + r * Math.sin(m.angle) }, m.angle, true)
+                        if (m.fieldCDcycle < m.cycle + 20) m.fieldCDcycle = m.cycle + 20
                     }
                 }
                 window.addEventListener("keydown", m.fieldEvent);
@@ -6615,7 +7028,7 @@ const m = {
                         m.throwBlock();
                     } else if (input.field) {
                         m.holdingTarget = null; //clears holding target (this is so you only pick up right after the field button is released and a hold target exists)
-                        if (m.fieldCDcycle < m.cycle) {
+                        if (m.fieldCDcycle < m.cycle && !bullet.some(who => who.isSlack)) { //pressing field with a slack line out pulls you along it instead of firing a new hook
                             if (m.energy > 0.02) m.energy -= 0.02
                             const r = 40
                             b.grapple({ x: m.pos.x + r * Math.cos(m.angle), y: m.pos.y + r * Math.sin(m.angle) }, m.angle)
@@ -6656,7 +7069,221 @@ const m = {
                             ctx.setLineDash([]);
                         }
                     }
-                    m.drawRegenEnergy()
+                    m.drawRegenEnergy() //
+                }
+            }
+        },
+        {
+            name: "portal",
+            isLoreField: true, //only given on the final lore run, and in experiment mode after testing is unlocked
+            portals: null, //the portal pair on this level, see level.surfacePortal()
+            isFireHeld: false, //one cyan portal per press of the fire button
+            isFieldHeld: false, //one orange portal per press of the field button
+            pickUpQueue: [], //power ups that fell into a portal, { who, to } where to is the other portal, used in m.hold
+            pressCycle: [null, null], //when fire and field were pressed, a portal is placed when they're let go
+            holdCycles: 10, //holding a button this long looks for blocks to pick up instead of only placing a portal
+            isPreview: false, //↑↓↑↓↑ turns the views through the portals on and off, see surfacePortal drawViews()
+            keyLog: [null, null, null, null, null],
+            energyCost() {
+                return tech.isFreeWormHole ? 0.02 : 0.1
+            },
+            size() { //scales the portal width
+                return tech.isLargePortal ? 1.5 : tech.isSmallPortal ? 0.8 : 1
+            },
+            text(isPlural = false) { //the cyan and orange keyword
+                return `<strong class='color-portal' data-help='portal'><span>por</span><span>tal${isPlural ? "s" : ""}</span></strong>`
+            },
+            descriptionFunction() {
+                return `use <strong>${(100 * this.energyCost()).toFixed(0)}</strong> <strong class='energy' data-help='energy'>energy</strong> to place ${this.text(true)}<br><strong>0.5x</strong> <strong class='color-defense' data-help='defense'>damage taken</strong>, but you can't use ${powerUps.orb.gun()}<br><strong>8</strong> <strong class='energy' data-help='energy'>energy</strong> per second<em style ="float: right; font-family: monospace;font-size:1rem;color:#fff;">↑↓↑↓↑</em>`
+            },
+            getPortals() { //level.start() clears the portals, so make a new pair when needed
+                if (!this.portals || !level.surfacePortals.includes(this.portals)) {
+                    this.portals = level.surfacePortal()
+                    this.portals.isViewOn = this.isPreview
+                    this.portals.onPlayerExit = () => this.playerExit()
+                    this.portals.onPowerUpEnter = (who, to) => { if (!this.pickUpQueue.some(item => item.who === who)) this.pickUpQueue.push({ who, to }) }
+                    this.pickUpQueue = []
+                }
+                return this.portals
+            },
+            cancelPresses() { //forget fire and field presses, so a click on a menu doesn't place a portal
+                this.isFireHeld = true
+                this.isFieldHeld = true
+                this.pressCycle = [null, null]
+            },
+            clear() { //remove the portals, when switching to another field
+                if (this.portals) {
+                    const index = level.surfacePortals.indexOf(this.portals)
+                    if (index > -1) level.surfacePortals.splice(index, 1)
+                    this.portals = null
+                }
+            },
+            fire(portals, index) { //index 0 is the cyan portal and 1 is the orange portal
+                const cost = this.energyCost()
+                const start = { x: m.pos.x, y: m.pos.y }
+                const target = { x: simulation.mouseInGame.x, y: simulation.mouseInGame.y }
+                const isPlaced = m.energy > cost && portals.placeAlongRay(index, start, target, this.size())
+                const end = portals.ends[index]
+                if (isPlaced) m.energy -= cost
+                const color = end.color
+                const stop = isPlaced ? { x: end.position.x, y: end.position.y } : Vector.add(start, Vector.mult(Vector.normalise(Vector.sub(target, start)), 150))
+                simulation.ephemera.push({ //a quick beam to the new portal, or a short dashed beam if it didn't fit
+                    count: 10,
+                    do() {
+                        this.count--
+                        if (this.count < 0) simulation.removeEphemera(this)
+                        ctx.beginPath()
+                        ctx.moveTo(start.x, start.y)
+                        ctx.lineTo(stop.x, stop.y)
+                        ctx.strokeStyle = isPlaced ? color + `${0.05 * this.count})` : `rgba(0,0,0,${0.03 * this.count})`
+                        ctx.lineWidth = isPlaced ? 4 : 2
+                        if (!isPlaced) ctx.setLineDash([10, 15])
+                        ctx.stroke()
+                        ctx.setLineDash([])
+                    },
+                })
+            },
+            pickUp({ who, to }) { //use a power up that fell into a portal, like a wormhole does
+                simulation.ephemera.push({
+                    count: 5, //cycles before it self removes
+                    PposX: who.position.x,
+                    PposY: who.position.y,
+                    size: who.size,
+                    color: who.color,
+                    do() {
+                        this.count--
+                        if (this.count < 0) simulation.removeEphemera(this)
+                        ctx.beginPath();
+                        ctx.arc(this.PposX, this.PposY, Math.max(1, this.size * (this.count + 1) / 7), 0, 2 * Math.PI);
+                        ctx.fillStyle = this.color
+                        ctx.fill();
+                    },
+                })
+                powerUps.onPickUp(who);
+                who.effect();
+                Matter.Composite.remove(engine.world, who);
+                const index = powerUp.indexOf(who)
+                if (index > -1) powerUp.splice(index, 1);
+                if (tech.isPortalDuplicate && !who.isPortalCopy && Math.random() < 0.33) { //beam splitter, a copy comes out of the other portal
+                    const where = Vector.add(to.position, Vector.mult(to.unit, who.size + 10))
+                    powerUps.directSpawn(where.x, where.y, who.name, false, who.size, true)
+                    const copy = powerUp[powerUp.length - 1]
+                    if (copy && copy.name === who.name) {
+                        copy.isPortalCopy = true //copies don't make more copies
+                        Matter.Body.setVelocity(copy, Vector.add(Vector.mult(to.unit, 8), { x: 2 * (Math.random() - 0.5), y: 2 * (Math.random() - 0.5) }))
+                    }
+                }
+            },
+            playerExit() { //after the player comes out of a portal
+                if (tech.isSmallPortal && m.immuneCycle < m.cycle + 240) m.immuneCycle = m.cycle + 240 //quantum foam, 4 seconds of invulnerability
+                if (m.coupling > 0) { //coupling
+                    m.energy += 0.01 * m.coupling * level.isReducedRegen //not m.addEnergy(), going through a portal makes you briefly immune, which blocks it
+                    for (let i = 0, len = Math.min(15, m.coupling / 5); i < len; i++) simulation.energyGenGraphic()
+                }
+                if (tech.isCloakHealLastHit && m.lastHit > 0) { //patch
+                    const heal = Math.min(0.75 * m.lastHit, m.energy)
+                    m.addHealth(heal);
+                    m.lastHit = 0
+                    simulation.drawList.push({ x: player.position.x, y: player.position.y, radius: Math.sqrt(heal) * 200, color: "rgba(0,255,200,0.6)", time: 16 });
+                }
+                if (tech.isCloakStun) { //dazzler
+                    const range = 500
+                    for (let i = 0, len = mob.length; i < len; ++i) {
+                        if (!mob[i].isBadTarget && Vector.magnitude(Vector.sub(mob[i].position, player.position)) < range && !Matter.Query.rayAny(map, mob[i].position, player.position)) {
+                            mobs.statusStun(mob[i], 120)
+                        }
+                    }
+                    simulation.drawList.push({ x: player.position.x, y: player.position.y, radius: range, color: "rgba(255,255,255,0.2)", time: 8 });
+                }
+            },
+            effect: () => {
+                m.fieldMeterColor = "#ff8800"
+                m.fieldRange = 0
+                m.fieldHarmReduction = 0.5
+                m.fieldUpgrades[11].cancelPresses() //a click that picked this field doesn't also place a portal
+                //store event function so it can be found and removed in m.setField()
+                m.fieldEvent = function (event) {
+                    m.fieldUpgrades[11].keyLog.shift() //remove first element
+                    m.fieldUpgrades[11].keyLog.push(event.code) //add new key to end
+                    const patternA = ["ArrowUp", "ArrowDown", "ArrowUp", "ArrowDown", "ArrowUp"]
+                    const patternB = [input.key.up, input.key.down, input.key.up, input.key.down, input.key.up]
+                    const arraysEqual = (a, b) => a.length === b.length && a.every((val, i) => val === b[i]);
+                    if (arraysEqual(m.fieldUpgrades[11].keyLog, patternA) || arraysEqual(m.fieldUpgrades[11].keyLog, patternB)) {
+                        //↑↓↑↓↑ see through the portals
+                        const field = m.fieldUpgrades[11]
+                        field.keyLog = [null, null, null, null, null] //so ↓↑ doesn't toggle it right back
+                        field.isPreview = !field.isPreview
+                        if (field.portals) field.portals.isViewOn = field.isPreview
+                        simulation.inGameConsole(`portals<span class='color-symbol'>.</span>isViewOn <span class='color-symbol'>=</span> ${field.isPreview} &nbsp; &nbsp; <em style="float: right;font-family: monospace;font-size: 1rem;color: #fff;">↑↓↑↓↑</em>`);
+                    }
+                }
+                window.addEventListener("keydown", m.fieldEvent);
+                m.hold = function () {
+                    const field = m.fieldUpgrades[11]
+                    const portals = field.getPortals()
+                    //fire places the cyan portal and field places the orange portal, guns are off, see b.setFireMethod()
+                    //a tap places a portal when you let go, holding looks for blocks to pick up, and if there's no block the portal is placed when you let go
+                    if (m.isHolding) { //either button charges and throws the block
+                        m.drawHold(m.holdingTarget);
+                        m.holding();
+                        const isField = input.field
+                        input.field = input.fire || input.field //m.throwBlock() only checks the field button
+                        m.throwBlock();
+                        input.field = isField
+                        field.pressCycle = [null, null] //buttons used for throwing don't place portals
+                    } else {
+                        for (let index = 0; index < 2; index++) {
+                            const isDown = index === 0 ? input.fire : input.field
+                            const wasDown = index === 0 ? field.isFireHeld : field.isFieldHeld
+                            if (isDown && !wasDown && m.fieldCDcycle < m.cycle) field.pressCycle[index] = m.cycle
+                            if (field.pressCycle[index] === null) continue
+                            if (isDown) {
+                                if (tech.isWormHolePause) { //invariant, pause time and show where the portal is going
+                                    if (m.immuneCycle < m.cycle + 1) m.immuneCycle = m.cycle + 1; //player is immune to damage for 1 cycle
+                                    m.freezeTime()
+                                    Matter.Body.setVelocity(player, { x: 0, y: -55 * player.mass * simulation.g }); //keep player frozen, undo gravity before it is added
+                                    player.force.x = 0
+                                    player.force.y = 0
+                                    ctx.beginPath()
+                                    ctx.moveTo(m.pos.x, m.pos.y)
+                                    ctx.lineTo(simulation.mouseInGame.x, simulation.mouseInGame.y)
+                                    ctx.strokeStyle = portals.ends[index].color + "0.5)"
+                                    ctx.lineWidth = 2
+                                    ctx.setLineDash([10, 15])
+                                    ctx.stroke()
+                                    ctx.setLineDash([])
+                                }
+                            } else { //let go
+                                const isHeld = m.cycle - field.pressCycle[index] >= field.holdCycles
+                                field.pressCycle[index] = null
+                                if (isHeld && m.holdingTarget) {
+                                    m.pickUp()
+                                    field.pressCycle = [null, null]
+                                    break
+                                }
+                                field.fire(portals, index)
+                            }
+                        }
+                        const pressed = field.pressCycle.filter(cycle => cycle !== null)
+                        if (m.isHolding) {
+                            //just picked up a block, keep m.holdingTarget
+                        } else if (pressed.length && m.cycle - Math.min(...pressed) >= field.holdCycles) {
+                            m.lookForBlock() //highlights the block you'd pick up
+                        } else {
+                            m.holdingTarget = null
+                        }
+                        if (!pressed.length && tech.isWormHolePause && m.isTimeDilated) m.wakeCheck();
+                    }
+                    field.isFireHeld = input.fire
+                    field.isFieldHeld = input.field
+                    if (input.fire || input.field) m.grabPowerUp(); //pull in power ups while either button is held, like the wormhole
+                    //power ups that fell into a portal, one at a time so choices don't stack up
+                    for (let i = field.pickUpQueue.length - 1; i > -1; i--) {
+                        if (!powerUp.includes(field.pickUpQueue[i].who)) field.pickUpQueue.splice(i, 1)
+                    }
+                    if (field.pickUpQueue.length && !simulation.isChoosing && !simulation.paused) field.pickUp(field.pickUpQueue.shift())
+                    portals.draw()
+                    m.drawRegenEnergy("rgba(0, 166, 187, 0.3)")
                 }
             }
         },
@@ -7007,14 +7634,18 @@ const m = {
                                         let dmg = tech.blockDamage * v * obj.mass * (tech.isMobBlockFling ? 2 : 1);
                                         if (mob[k].isShielded) dmg *= 0.7
                                         mob[k].damage(dmg, true);
-                                        if (tech.isBlockPowerUps && !mob[k].alive && mob[k].isDropPowerUp && Math.random() < 0.5) {
-                                            let type = "ammo"
-                                            if (Math.random() < 0.4) {
-                                                type = "heal"
-                                            } else if (Math.random() < 0.4 && !tech.isSuperDeterminism) {
-                                                type = "research"
+                                        if (tech.isBlockPowerUps && !mob[k].alive && mob[k].isDropPowerUp) {
+                                            for (let i = 0, len = tech.isMobDeathRepeat ? 2 : 1; i < len; i++) { //double beta decay rolls buckling twice
+                                                if (Math.random() < 0.5) {
+                                                    let type = "ammo"
+                                                    if (Math.random() < 0.4) {
+                                                        type = "heal"
+                                                    } else if (Math.random() < 0.4 && !tech.isSuperDeterminism) { // eslint-disable-line no-dupe-else-if
+                                                        type = "research"
+                                                    }
+                                                    powerUps.spawn(mob[k].position.x, mob[k].position.y, type);
+                                                }
                                             }
-                                            powerUps.spawn(mob[k].position.x, mob[k].position.y, type);
                                             // for (let i = 0, len = Math.ceil(2 * Math.random()); i < len; i++) {}
                                         }
 

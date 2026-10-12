@@ -48,6 +48,18 @@ select {
     cursor: pointer;
 }
 
+/* clickable things get the pointer cursor, text fields keep the browser's text cursor */
+button,
+input[type="checkbox"],
+input[type="checkbox"]+label,
+input[type="range"] {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: default;
+}
+
 input {
     padding: 0px 4px;
     font-size: 0.8em;
@@ -70,6 +82,7 @@ em {
 }
 
 #splash {
+    cursor: default;
     user-select: none;
     position: absolute;
     top: 0;
@@ -109,6 +122,7 @@ td {
 }
 
 .key-input {
+    cursor: pointer;
     padding: 3px 8px;
     border: 2px solid #333;
     background-color: #fff;
@@ -134,12 +148,14 @@ td {
 
 summary {
     font-size: 1.2em;
+    cursor: pointer;
 }
 
 .SVG-button {
     border: 1.5px #333 solid;
     border-radius: 8px;
     background-color: #fff;
+    cursor: pointer;
 }
 
 .SVG-button:hover {
@@ -290,6 +306,17 @@ body.has-autosave #start-button {
     background-color: var(--hover-card-color);
 }
 
+.choose-grid-module[onclick],
+.experiment-grid-module[onclick],
+.cancel-card[onclick],
+.research-card[onclick],
+.pause-eject,
+#exit,
+#choose-unPause,
+#choose-training {
+    cursor: pointer;
+}
+
 .choose-grid-module:hover .card-text {
     background-color: var(--hover-card-color);
 }
@@ -346,6 +373,53 @@ body.has-autosave #start-button {
     font-size: 0.75em;
     white-space: nowrap;
     overflow: hidden;
+}
+
+/* top of the left pause column (status) and the pause settings menu */
+.pause-top {
+    padding: 6px 8px;
+}
+
+.pause-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0px 8px;
+    /* if a row doesn't fit on one line the right side wraps instead of getting cut off */
+}
+
+.pause-setting input {
+    margin-left: 0px;
+}
+
+.pause-hint {
+    color: #999;
+}
+
+.pause-hint .key-input-train {
+    padding: 0px 4px;
+    border-width: 1.5px;
+}
+
+#pause-console {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 5px;
+    font-family: monospace;
+}
+
+#pause-console-input {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 6px;
+    font-family: monospace;
+    font-size: 0.85em;
+    color: #000;
+    background-color: #fff;
+    border: 1px solid #999;
+    border-radius: 3px;
 }
 
 .sort {
@@ -1020,6 +1094,11 @@ body.has-autosave #start-button {
     cursor: help;
 }
 
+button[data-help],
+button [data-help] {
+    cursor: pointer;
+}
+
 #hover-help {
     display: none;
     position: fixed;
@@ -1046,7 +1125,8 @@ body.has-autosave #start-button {
 }
 
 #hover-help[data-help-key="coupling"],
-#hover-help[data-help-key="orb-coupling"] {
+#hover-help[data-help-key="orb-coupling"],
+#hover-help[data-help-key="mob-death"] {
     max-width: min(330px, calc(100vw - 16px));
 }
 
@@ -1181,6 +1261,12 @@ body.has-autosave #start-button {
     text-shadow: 1.5px -1.5px hsla(243, 100%, 38%, 0.2);
 }
 
+.color-death {
+    /* a faint ghost of the word floats above it, used for mob death tech */
+    color: #3e4458;
+    text-shadow: 0 -0.45em 0 rgba(95, 110, 170, 0.25);
+}
+
 .color-remove {
     text-decoration: line-through;
     /* letter-spacing: 2px; */
@@ -1231,6 +1317,16 @@ body.has-autosave #start-button {
 .color-worm {
     color: #fff;
     text-shadow: 1px 0px 2px #234;
+}
+
+.color-portal span:nth-child(1) {
+    color: hsl(197, 100%, 42%);
+    background-color: hsla(197, 100%, 50%, 0.1);
+}
+
+.color-portal span:nth-child(2) {
+    color: hsl(29, 100%, 48%);
+    background-color: hsla(29, 100%, 50%, 0.1);
 }
 
 .color-print {
@@ -1541,6 +1637,44 @@ body.has-autosave #start-button {
         text-shadow: -3px 0px 0px;
     }
 
+}
+
+/* localization drop down, a details element because select options can't show orbs */
+.non-demolition-menu {
+    float: right;
+    border: 1px #333 solid;
+    border-radius: 6px;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+.non-demolition-menu summary {
+    list-style: none;
+    padding: 0 0.3em;
+}
+
+.non-demolition-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+.non-demolition-menu summary::after {
+    content: " \25BE";
+}
+
+.non-demolition-menu[open] summary {
+    border-bottom: 1px #333 solid;
+}
+
+.non-demolition-option {
+    padding: 0.1em 0.3em;
+}
+
+.non-demolition-option:hover {
+    background-color: var(--hover-card-color);
+}
+
+.non-demolition-option-selected {
+    background-color: #e2e9ec;
 }
 
 .flicker {
@@ -2047,12 +2181,44 @@ body.has-autosave #start-button {
     margin-right: auto;
 }
 
-.pause-difficulty-row {
+/* pause menu copy of the difficulty power up grid
+the gaps show the border color through, so the lines are only between options and the details box is the outside border */
+.pause-details.pause-difficulty-grid {
+    display: grid;
+    gap: 1px;
+    font-size: 0.85em;
+    /* small enough that every option fits on one line at the narrowest pause column */
+    padding: 0px;
+    overflow: hidden;
+    background-color: #333;
+}
+
+.pause-difficulty-section {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+}
+
+.pause-difficulty-option {
+    display: flex;
+    align-items: center;
+    padding: 4px 6px;
+    background-color: #e2e9ec;
     line-height: 130%;
-    font-size: 1em;
-    padding: 7px 0px 7px 0px;
-    /* top | right | bottom | left */
-    margin: -5px 0;
+    white-space: normal;
+}
+
+/* an odd option out at the end of a section fills its row */
+.pause-difficulty-option:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+}
+
+.pause-difficulty-option>span {
+    opacity: 0.1;
+}
+
+.pause-difficulty-selected>span {
+    opacity: 1;
 }
 
 .pause-details {

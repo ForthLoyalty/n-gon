@@ -187,7 +187,7 @@ const powerUps = {
     totalPowerUps: 0, //used for tech that count power ups at the end of a level
     do() { },
     setPowerUpMode() { //choose the per cycle power up work once, instead of checking tech every cycle
-        const isDuplication = tech.duplicationChance() > 0 || tech.isAnthropicTech || tech.isGUT
+        const isDuplication = tech.duplicationChance() > 0 || tech.isAnthropicTech || tech.isGUT || tech.isPortalDuplicate //beam splitter
         const isExplode = isDuplication && tech.isPowerUpsVanish //metastability
         const isAttract = tech.isHealAttract //accretion
         powerUps.draw = isDuplication ? powerUps.drawDup : powerUps.drawCircle
@@ -319,6 +319,7 @@ const powerUps = {
                 }
             }
         }
+        simulation.warmShaders()
         powerUps.endDraft(type);
     },
     showDraft() {
@@ -387,6 +388,7 @@ const powerUps = {
         build.unPauseGrid()
         if (m.immuneCycle < m.cycle + 5) m.immuneCycle = m.cycle + 5; //player is immune to damage
         if (m.holdingTarget) m.drop();
+        if (m.fieldMode === 11) m.fieldUpgrades[11].cancelPresses() //a portal press from before the choice doesn't place a portal after it
         mouseMove.lock()
     },
     animatePowerUpGrab(color, count = 25) {
@@ -436,8 +438,9 @@ const powerUps = {
             let text = `<div class="grid-container" style = "font-size:1rem;padding: 0px;"><pre> <strong>//console commands</strong>
  powerUps.instructions.effect()     //reproduce this message
  powerUps.warp.effect()             //warp to any level
+ saveGame.rewind()                  //restart this level from its checkpoint
  tech.giveTech("name")              //replace "name" with tech name
- m.setField("name")                 //standing wave  perfect diamagnetism  negative mass  molecular assembler  plasma torch  time dilation  metamaterial cloaking  pilot wave  wormhole  grappling hook
+ m.setField("name")                 //standing wave  perfect diamagnetism  negative mass  molecular assembler  plasma torch  time dilation  metamaterial cloaking  pilot wave  wormhole  grappling hook  portal
  b.giveGuns("name")                 //nail gun  shotgun  super balls  wave  missiles  grenades  spores  drones  foam  harpoon  mine  laser
  m.damageDone *= 2                  //2x damage
  m.immuneCycle = Infinity           //immune to damage            
@@ -459,7 +462,8 @@ const powerUps = {
 
                          <strong>chrome</strong>                 <strong>firefox</strong>               <strong>safari</strong>
  <strong>Win/Linux/ChromeOS:</strong> Ctrl + Shift + J       Ctrl + Shift + J      Ctrl + Alt + C
-              <strong>macOS:</strong> Cmd + Option + J       Cmd + Shift + J       Option + Cmd + C </pre></div><div class="choose-grid-module" id="exit" style="text-align: center;font-size: 1.3rem;">exit</div>`
+              <strong>macOS:</strong> Cmd + Option + J       Cmd + Shift + J       Option + Cmd + C
+            <strong>in-game:</strong> press ${input.key.pause.replace(/^Key/, "")} to pause, then type in the console log box</pre></div><div class="choose-grid-module" id="exit" style="text-align: center;font-size: 1.3rem;">exit</div>`
             document.getElementById("choose-grid").innerHTML = text
             //show level info
             document.getElementById("choose-grid").style.opacity = "1"
@@ -623,8 +627,10 @@ const powerUps = {
         equipmentDelay() {
             return Number(simulation.difficultyOptions.isLateEquipment);
         },
-        pauseText() {
-            return this.options.filter(option => simulation.difficultyOptions[option.key]).map(option => `<div class="pause-difficulty-row">${option.text}</div>`).join("") || 'no difficulty options selected';
+        pauseText() { //a small copy of the power up grid, options that aren't selected are faded out
+            const o = simulation.difficultyOptions;
+            const section = options => `<div class="pause-difficulty-section">${options.map(option => `<div class="pause-difficulty-option${o[option.key] ? " pause-difficulty-selected" : ""}"><span>${option.text}</span></div>`).join("")}</div>`;
+            return section(this.options.filter(option => option.required)) + section(this.options.filter(option => !option.required));
         },
         size() {
             return 80 / Math.pow(simulation.difficultyMode, 1.5);
@@ -1261,7 +1267,7 @@ const powerUps = {
         const click = `powerUps.choose('tech',${choose})`
         if (t.isFieldTech) return powerUps.fieldTechText(choose, click)
         if (t.isGunTech) return powerUps.gunTechText(choose, click)
-        if (t.isLore) return `<div class="choose-grid-module" onclick="${click}"><div class="grid-title lore-text"><div class="circle-grid-title lore"></div> &nbsp; ${t.name} ${t.count > 0 ? `(${t.count + 1}x)` : ""}</div>${t.descriptionFunction ? t.descriptionFunction() : t.description}</div>`
+        if (t.isLore) return powerUps.card(`<div class="circle-grid-title lore"></div> &nbsp; <span class="lore-text">${t.name} ${t.count > 0 ? `(${t.count + 1}x)` : ""}</span>`, t.descriptionFunction ? t.descriptionFunction() : t.description, click)
         if (t.isJunk) return powerUps.junkTechText(choose, click)
         if (t.isSkin) return powerUps.skinTechText(choose, click)
         if (t.isSkinUpgrade) return powerUps.skinTechUpgradeText(choose, click)
@@ -1346,7 +1352,7 @@ const powerUps = {
             if (m.alive) {
                 let options = [];
                 for (let i = 1; i < m.fieldUpgrades.length; i++) { //skip field emitter
-                    if (i !== m.fieldMode) options.push(i);
+                    if (i !== m.fieldMode && !m.fieldUpgrades[i].isLoreField) options.push(i);
                 }
                 let totalChoices = 2 + tech.extraChoices + (tech.isInPilot ? 6 : 3) * (m.fieldMode === 8) - level.fewerChoices
                 if (tech.isCancelTech && tech.cancelTechCount === 1) {
@@ -1501,7 +1507,7 @@ const powerUps = {
                         } else {
                             let fieldOptions = [];
                             for (let i = 1; i < m.fieldUpgrades.length; i++) { //skip field emitter
-                                if (i !== m.fieldMode) fieldOptions.push(i);
+                                if (i !== m.fieldMode && !m.fieldUpgrades[i].isLoreField) fieldOptions.push(i);
                             }
                             const pick = fieldOptions[Math.floor(Math.seededRandom(0, fieldOptions.length))] //pick an element from the array of options
                             text += powerUps.fieldText(pick, `powerUps.choose('field',${pick})`)
@@ -1671,7 +1677,7 @@ const powerUps = {
         }
         if (level.isNoDamage) level.noDamageCycle = m.cycle
     },
-    spawnRandomPowerUp(x, y) { //mostly used after mob dies,  doesn't always return a power up
+    spawnTechPowerUps(x, y, isRepeat = false) { //power up chances from tech after mobs die, double beta decay rolls them again with isRepeat
         const dropScale = tech.isCrystallography && powerUp.length === 0 ? 3 : 1;
         if (tech.coupling && Math.random() < tech.coupling * dropScale) {
             powerUps.spawn(x + 10, y - 1, "coupling");
@@ -1686,6 +1692,11 @@ const powerUps = {
             const options = ["boost", "coupling", "Casimir", "qubit"]
             powerUps.spawn(x, y, options[Math.floor(Math.random() * options.length)]);
         }
+        if (isRepeat && tech.isBoostPowerUps && Math.random() < 0.14 * dropScale) powerUps.spawn(x, y, "boost"); //exciton's first roll is at the end of spawnRandomPowerUp
+    },
+    spawnRandomPowerUp(x, y) { //mostly used after mob dies,  doesn't always return a power up
+        const dropScale = tech.isCrystallography && powerUp.length === 0 ? 3 : 1;
+        powerUps.spawnTechPowerUps(x, y)
         if (!tech.isEnergyHealth && (Math.random() * Math.random() - 0.3 > Math.sqrt(m.health)) || Math.random() < 0.04 * dropScale) { //spawn heal chance is higher at low health
             powerUps.spawn(x, y, "heal");
             return;
@@ -1742,9 +1753,10 @@ const powerUps = {
                 powerUps.spawn(x, y + 40, "heal", false)
                 powerUps.spawn(x, y - 40, "heal", false)
             }
-            if (tech.isResearchReality) powerUps.spawnDelay("research", 6, 2, { x: x, y: y })
-            if (tech.isBanish) powerUps.spawnDelay("research", simulation.difficultyOptions.isSecondBoss ? 2 : 4, 2, { x: x, y: y })
-            if (tech.isCouplingNoHit) powerUps.spawnDelay("coupling", 9, 2, { x: x, y: y })
+            const repeat = tech.isMobDeathRepeat ? 2 : 1 //double beta decay doubles these mob death tech
+            if (tech.isResearchReality) powerUps.spawnDelay("research", 6 * repeat, 2, { x: x, y: y })
+            if (tech.isBanish) powerUps.spawnDelay("research", (simulation.difficultyOptions.isSecondBoss ? 2 : 4) * repeat, 2, { x: x, y: y })
+            if (tech.isCouplingNoHit) powerUps.spawnDelay("coupling", 9 * repeat, 2, { x: x, y: y })
         }
     },
     chooseRandomPowerUp(x, y) { //100% chance to drop a random power up    //used in spawn.debris

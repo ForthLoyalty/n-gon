@@ -14,7 +14,7 @@ const level = {
     isFlipping: false,
     uniqueLevels: ["initial", "reservoir", "factory", "interferometer", "reactor", "subway", "final"], //see level.populateLevels:   (initial, ... , (reservoir, factory, or interferometer), reactor, ... , subway, final)    added later
     playableLevels: ["labs", "rooftops", "skyscrapers", "warehouse", "highrise", "office", "aerie", "satellite", "sewers", "testChamber", "pavilion", "lock", "towers", "flocculation", "gravitron", "substructure", "corridor", "furnace", "superstructure", "HVAC", "chute", "refinery"], //, "vault"
-    communityLevels: ["gauntlet", "stronghold", "basement", "crossfire", "vats", "run", "ngon", "house", "perplex", "coliseum", "tunnel", "islands", "temple", "dripp", "biohazard", "yingYang", "staircase", "fortress", "commandeer", "clock", "buttonbutton", "downpour", /* "superNgonBros", */ "underpass", "cantilever", "tlinat", "ruins", "ace", "crimsonTowers", "LaunchSite", "shipwreck", "unchartedCave", "dojo", "arena", "soft", "flappyGon", "rings", "trial", "zenith", "archipelago", "vents", "intervals", "turbine", "terminal", "conduit", "voltage"],
+    communityLevels: ["gauntlet", "stronghold", "basement", "crossfire", "vats", "run", "ngon", "house", "perplex", "coliseum", "tunnel", "islands", "temple", "dripp", "biohazard", "yingYang", "staircase", "fortress", "commandeer", "clock", "buttonbutton", "downpour", /* "superNgonBros", */ "underpass", "cantilever", "tlinat", "ruins", "ace", "crimsonTowers", "LaunchSite", "shipwreck", "unchartedCave", "dojo", "arena", "soft", "flappyGon", "rings", "trial", "zenith", "archipelago", "vents", "intervals", "turbine", "terminal", "conduit", "voltage", "lake", "ballast"],
     trainingLevels: ["walk", "crouch", "jump", "hold", "throw", "throwAt", "deflect", "heal", "fire", "nailGun", "shotGun", "superBall", "matterWave", "missile", "stack"], //, "mine", "grenades", "harpoon"
     levels: [],
     moreLevelsPromise: null,
@@ -22,66 +22,72 @@ const level = {
     start() {
         saveGame.autosave() //the previous level is already cleared, so this is the state a loaded save starts from
         spawn.randomMobPositions.length = 0
+        level.surfacePortals.length = 0
         level.setConstraints()
         if (level.levelsCleared === 0) { //this code only runs on the first level
             // if (false) {
             if (true) {
                 level.load(simulation.isTraining ? "walk" : "initial") //normal starting level **************************************************
-            } else {
-                //testing setup
+            } else { //testing setup
                 simulation.enableConstructMode()  //used to build maps in testing mode
                 // simulation.setZoom(600) //zoom way in to see details
-                // simulation.difficultyMode = 1
-                // build.isExperimentRun = true
                 // tech.duplicateChance += 1
                 // powerUps.setPowerUpMode(); //needed after adjusting duplication chance
                 // simulation.isHorizontalFlipped = false
-                level.levelsCleared = 10
-                level.updateDifficulty()
+                // level.levelsCleared = 10
+                // level.updateDifficulty()
                 // simulation.isCheating = true
                 // tech.giveTech("performance")
                 // m.coyoteCycles = 120
                 powerUps.research.changeRerolls(100000)
-                // tech.tech[297].frequency = 100
                 // tech.addJunkTechToPool(0.5)
                 // m.couplingChange(100)
-                // requestAnimationFrame(() => { m.setField(9) });
-                // m.setField(4) //1 standing wave  2 perfect diamagnetism  3 negative mass  4 molecular assembler  5 plasma torch  6 time dilation  7 metamaterial cloaking  8 pilot wave  9 wormhole 10 grappling hook
+                m.setField(10) //1 standing wave  2 perfect diamagnetism  3 negative mass  4 molecular assembler  5 plasma torch  6 time dilation  7 metamaterial cloaking  8 pilot wave  9 wormhole 10 grappling hook 11 portal
                 // simulation.molecularMode = 4;
                 // m.energy = m.maxEnergy = 12.2
-                // m.energy += 1
-                // m.couplingChange(1000)
-                // m.fieldUpgrades[6].isRewindMode = true
-                // window.removeEventListener("keydown", m.fieldEvent);
-                // m.fieldUpgrades[6].set()
-                // m.wakeCheck();
-                // m.damageDone *= 10
+                m.damageDone *= 10
 
                 m.maxHealth = m.health = 100
-                // m.energy = m.health = 0.000001
                 // m.displayHealth();
                 // m.immuneCycle = Infinity //you can't take damage
                 // m.maxEnergy = m.energy = 10000000
-                // powerUps.research.count = 3
-                // tech.isHookWire = true
-                // m.energy = 0
-                // simulation.molecularMode = 2
-                // m.takeDamage(0.01);
+
                 // 0 nail gun  1 shotgun  2 super balls 3 wave 4 missiles 5 grenades  6 spores
                 // 7 drones  8 foam  9 harpoon  10 mine  11 laser 12 sword
-                b.giveGuns(1)
+                b.giveGuns(0)
                 b.guns[b.inventory[0]].ammo = 100000
                 // tech.addJunkTechToPool(0.5)
+                // for (let i = 0; i < 1; i++) tech.giveTech("mass hyperboloid")
+                // for (let i = 0; i < 1; i++) tech.giveTech("thermal runaway")
+                // for (let i = 0; i < 1; i++) tech.giveTech("shear stress")
+                // for (let i = 0; i < 1; i++) tech.giveTech("double beta decay")
+                // for (let i = 0; i < 3; i++) tech.giveTech("nail-bot")
+                // simulation.difficultyOptions.isStrongerConstraints = true //stronger slow bots, the slowed bots wait 1.5x longer between attacks
+                // level.constraint.find(c => c.description === "slow bots").effect()
                 // for (let i = 0; i < 1; ++i) tech.giveTech("optical resonator")
-                // for (let i = 0; i < 1; ++i) tech.giveTech("spaghettification")
-                // tech.giveTech("8-bit")
-                // for (let i = 0; i < 1; ++i) tech.giveTech("manifold")
+                // for (let i = 0; i < 3; ++i) tech.giveTech("Meissner effect")
+                // for (let i = 0; i < 1; ++i) tech.giveTech("ray")
+                // for (let i = 0; i < 1; ++i) tech.giveTech("Hawking radiation")
+                // for (let i = 0; i < 9; ++i) tech.giveTech("impulse")
+                // for (let i = 0; i < 1; ++i) tech.giveTech("fatigue")
                 // for (let i = 0; i < 1; ++i) tech.giveTech("pulse")
                 // for (let i = 0; i < 1; i++) tech.giveTech("photonic crystal")
                 // for (let i = 0; i < 1; i++) tech.giveTech("needle gun")
                 // for (let i = 0; i < 1; i++) tech.giveTech("siphonaptera")
                 // for (let i = 0; i < 1; i++) tech.giveTech("nematodes")
-                for (let i = 0; i < 1; i++) tech.giveTech("shotgun shell") //swap between fleas and worms when paused
+                // for (let i = 0; i < 1; i++) tech.giveTech("shotgun shell") //swap between fleas and worms when paused
+                // tech.giveTech("beam splitter")
+                // tech.giveTech("Einstein-Rosen bridge")
+                // tech.giveTech("quantum foam")
+                // tech.giveTech("nitinol")
+                // tech.giveTech("optimization") //swap skins when paused
+                // tech.giveTech("outlier")
+                // tech.giveTech("ground wire")
+                // for (let i = 0; i < 3; i++) tech.giveTech("observer effect")
+                // tech.giveTech("many-worlds") //alternate reality at the start of each level
+                // tech.giveTech("localization") //choose what doesn't change in an alternate reality when paused
+                // tech.giveTech("quantum immortality")
+                // tech.giveTech("self-locating uncertainty") //dying rewinds to the checkpoint, so clear the first level before testing it
                 // for (let i = 0; i < 1; ++i) tech.giveTech("incendiary ammunition")
                 // for (let i = 0; i < 1; i++) tech.giveTech("foam-shot")
                 // for (let i = 0; i < 1; i++) tech.giveTech("uncertainty principle")
@@ -90,15 +96,20 @@ const level = {
                 // simulation.isHorizontalFlipped = true
                 // localSettings.levelsClearedLastGame = 5 //triggers tech to spawn on initial level
                 // level.load("diamagnetism")
-                // level.load("HVAC")
+                // level.load("chute")
+                // level.load("initial")
                 level.maps.testing()
 
-                powerUps.spawn(m.pos.x, m.pos.y, "difficulty", false);
+                powerUps.spawn(-115, -433, "difficulty", false);
                 // requestAnimationFrame(() => { powerUps.spawnDelay("tech", 7); });
                 // spawn.randomGroup(1300, -200, Infinity);
                 // spawn.nodeGroup(1300, -200, 'grower');
-                for (let i = 0; i < 1; i++) spawn.mantisBoss(1300 + 10 * i, -400)
+                // for (let i = 0; i < 1; i++) spawn.mantisBoss(1300 + 10 * i, -400)
                 // for (let i = 0; i < 1; i++) spawn.starter(1300 + 200 * i, -200, 100)
+                for (let i = 0; i < 3; i++) spawn.starter(2400 + 200 * i, -200)
+                spawn.jellyBoss2(1300, -500)
+                // spawn.jellyBoss2(1300, -500)
+                // spawn.jellyBoss(1300, -500)
                 // for (let i = 0; i < 1; i++) spawn.shieldingBoss(2300 + 200 * i, -200)
                 // Matter.Body.setPosition(player, { x: -27000, y: -400 });
                 // m.storeTech() //sets entanglement
@@ -106,6 +117,8 @@ const level = {
                 // for (let i = 0; i < 30; ++i) powerUps.directSpawn(m.pos.x + 450 + 150 * Math.random(), m.pos.y + 150 * Math.random(), "coupling");
                 // for (let i = 0; i < 100; i++) powerUps.spawn(player.position.x + Math.random() * 50, player.position.y - Math.random() * 50, "coupling", false);
                 // level.constraint[0].effect()  // turn this off first ->  seededShuffle(level.constraint)
+                // level.constraint.find(c => c.description === "mobs reproduce").effect()
+                // level.constraint.find(c => c.description === "mobs regenerate").effect()
 
                 // level.defaultZoom = 600 //zoom in close
                 // simulation.zoomTransition(level.defaultZoom)
@@ -116,9 +129,9 @@ const level = {
                 // for (let i = 0; i < 5; i++) tech.giveTech("undefined")
                 // lore.techCount = 1
                 // level.levelsCleared = 10
-                // localSettings.loreCount = 1 //this sets what conversation is heard
-                // localSettings.levelsClearedLastGame = 10
-                // if (localSettings.isAllowed) localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
+                localSettings.loreCount = 1 //this sets what conversation is heard
+                localSettings.levelsClearedLastGame = 10
+                if (localSettings.isAllowed) localStorage.setItem("localSettings", JSON.stringify(localSettings)); //update local storage
                 // level.onLevel = -1 //this sets level.levels[level.onLevel] = undefined which is required to run the conversation
                 // level.maps.null()
                 // localSettings.isHuman = true
@@ -133,6 +146,7 @@ const level = {
             }
         } else {
             spawn.setSpawnList(); //picks a couple mobs types for a themed random mob spawns
+            if (spawn.isPacifistStarters()) spawn.pickList = ["starter", "starter"] //pacifist lore run, regular mobs are all starters
             // spawn.pickList = ["focuser", "focuser"]
             level.load(level.levels[level.onLevel]); //picks the current map from level.maps or moreLevels
             if (!simulation.isCheating && !build.isExperimentRun && !simulation.isTraining && !saveGame.isResuming) {
@@ -146,8 +160,10 @@ const level = {
         simulation.setZoom();
         level.addToWorld(); //add bodies to game engine
         simulation.draw.setPaths();
+        simulation.draw.updateLineOfSightSetting();
         b.respawnBots();
         m.resetHistory();
+        simulation.removeEphemera("stuck", true) //a stuck check from the last level shouldn't move the player on this one
         level.deliverTransfers();
 
         m.fieldCDcycle = m.cycle + 15;
@@ -975,6 +991,44 @@ const level = {
             }
         },
         {
+            description: "mobs regenerate",
+            effect() {
+                this.remove();
+                level.mobRegenCycles = simulation.difficultyOptions.isStrongerConstraints ? 180 : 300 //recover 80% of damage over 5s, 3s when stronger
+                this.regenEffect = {
+                    name: "mobs regenerate",
+                    do() {
+                        if (m.isTimeDilated) return;
+                        for (let i = 0; i < mob.length; i++) {
+                            const who = mob[i]
+                            if (who.regenPool > 0 && who.alive) {
+                                const heal = Math.min(who.regenRate, who.regenPool)
+                                who.regenPool -= heal
+                                if (who.health < 1) who.health = Math.min(1, who.health + heal)
+                                //green outline while healing
+                                ctx.beginPath();
+                                const v = who.vertices;
+                                ctx.moveTo(v[0].x, v[0].y);
+                                for (let j = 1; j < v.length; ++j) ctx.lineTo(v[j].x, v[j].y);
+                                ctx.lineTo(v[0].x, v[0].y);
+                                ctx.lineWidth = 4
+                                ctx.strokeStyle = `rgba(0,255,100,${Math.min(0.7, 0.15 + 4 * who.regenPool)})`
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                };
+                simulation.ephemera.push(this.regenEffect);
+            },
+            remove() {
+                level.mobRegenCycles = 0
+                if (this.regenEffect) {
+                    simulation.removeEphemera(this.regenEffect);
+                    this.regenEffect = null;
+                }
+            }
+        },
+        {
             description: "death heals mobs",
             effect() {
                 level.isMobDeathHeal = true
@@ -1065,6 +1119,50 @@ const level = {
             }
         },
         {
+            description: "mobs reproduce",
+            effect() {
+                this.remove();
+                const isNormalMob = who => who.alive && who.isDropPowerUp && !who.isBoss && !who.shield && !who.isMobBullet && who.collisionFilter.category !== cat.mobBullet
+                this.reproduceEffect = {
+                    name: "mobs reproduce",
+                    maxMobs: null, //double the normal mobs on the first cycle, after the map's mobs have spawned
+                    cooldown: simulation.difficultyOptions.isStrongerConstraints ? 420 : 600,
+                    count: 0,
+                    do() {
+                        if (!m.alive || m.isTimeDilated) return;
+                        if (this.maxMobs === null) this.maxMobs = 2 * mob.filter(isNormalMob).length
+                        if (++this.count < this.cooldown) return;
+                        //copy a random normal mob that is far from the player
+                        const parents = mob.filter(who => isNormalMob(who) && who.spawnName && Vector.magnitudeSquared(Vector.sub(who.position, m.pos)) > 1200 * 1200)
+                        if (!parents.length || mob.filter(isNormalMob).length >= this.maxMobs) { //try again in 1 second
+                            this.count -= 60
+                            return
+                        }
+                        const parent = parents[Math.floor(Math.random() * parents.length)]
+                        spawn[parent.spawnName](parent.position.x + 10 * (Math.random() - 0.5), parent.position.y + 10 * (Math.random() - 0.5), ...parent.spawnArgs)
+                        for (let i = 1; i < 4; i++) {
+                            simulation.drawList.push({
+                                x: parent.position.x,
+                                y: parent.position.y,
+                                radius: parent.radius + 15 * i,
+                                color: `rgba(255,255,255,${0.6 / i})`,
+                                time: 20 * i
+                            });
+                        }
+                        this.count = 0
+                        this.cooldown += 60 //wait 1 second longer after each copy
+                    }
+                };
+                simulation.ephemera.push(this.reproduceEffect);
+            },
+            remove() {
+                if (this.reproduceEffect) {
+                    simulation.removeEphemera(this.reproduceEffect);
+                    this.reproduceEffect = null;
+                }
+            }
+        },
+        {
             description: "no duplication",
             effect() {
                 level.isNoDuplicate = true
@@ -1141,6 +1239,7 @@ const level = {
     isMobDeathFreeze: false,
     isMobDeathHeal: false,
     isMobHealPlayerDamage: false,
+    mobRegenCycles: 0, //0 when the mobs regenerate constraint is off
     isNoDamage: false,
     noDamageCycle: 0,
     reducedHealthLost: 0,
@@ -1340,7 +1439,6 @@ const level = {
     // the camera keeps their source visible, with enough zoom-out that it cannot go past the player.
     // another issue is with multiple mirrors we don't want them drawing each other, the call order of multiple level.mirrors in the level should fix it if it's one sided
     mirror(x, y, width, height, direction = "right", opacity = 1, tintOpacity = 0, tintColor = "#040") {
-        if (localSettings.isHideHUD) return; //performance mode: do not register a mirror
         if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
             throw new RangeError("mirror requires finite coordinates and positive dimensions");
         }
@@ -1364,7 +1462,8 @@ const level = {
                     return;
                 }
                 const { opacity, tintOpacity } = this;
-                if (simulation.isTimeSkipping) return;
+                if (localSettings.isHideHUD) return; //performance mode, checked every frame so the pause menu toggle applies right away
+                if (simulation.isTimeSkipping || simulation.draw.isLineOfSight()) return; //mirrors copy the canvas, which doesn't work with line of sight
                 if (opacity === 0 && tintOpacity === 0) return;
 
                 // The camera translates/scales world coordinates; the source
@@ -1420,7 +1519,6 @@ const level = {
     // reflectionScale below 1 shrinks the scene by sampling a larger adjacent area.
     // verticalOffset shifts the image inside the fixed mirror: positive down, negative up (world units).
     mirrorExperimental(x, y, width, height, direction = "right", opacity = 1, tintOpacity = 0, tintColor = "#040", reflectionScale = 1, verticalOffset = 0) {
-        if (localSettings.isHideHUD) return; //performance mode: do not register a mirror
         if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
             throw new RangeError("mirrorExperimental requires finite coordinates and positive dimensions");
         }
@@ -1457,7 +1555,8 @@ const level = {
                     return;
                 }
                 const { opacity, tintOpacity } = this;
-                if (simulation.isTimeSkipping) return;
+                if (localSettings.isHideHUD) return; //performance mode, checked every frame so the pause menu toggle applies right away
+                if (simulation.isTimeSkipping || simulation.draw.isLineOfSight()) return; //mirrors copy the canvas, which doesn't work with line of sight
                 if (opacity === 0 && tintOpacity === 0) return;
 
                 // The camera translates/scales world coordinates; the source
@@ -1514,7 +1613,6 @@ const level = {
     // Same parameters as mirror, followed by pixel block size in world units and
     // glitch probability: 0 never skips a draw cycle, 1 always skips it.
     mirrorPixel(x, y, width, height, direction = "right", opacity = 1, tintOpacity = 0, tintColor = "#040", pixelSize = 8, glitch = 0) {
-        if (localSettings.isHideHUD) return; //performance mode: no ephemera or buffer allocation
         if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
             throw new RangeError("mirrorPixel requires finite coordinates and positive dimensions");
         }
@@ -1547,7 +1645,8 @@ const level = {
                     simulation.removeEphemera(this);
                     return;
                 }
-                if (simulation.isTimeSkipping) return;
+                if (localSettings.isHideHUD) return; //performance mode, checked every frame so the pause menu toggle applies right away
+                if (simulation.isTimeSkipping || simulation.draw.isLineOfSight()) return; //mirrors copy the canvas, which doesn't work with line of sight
                 if (opacity === 0 && tintOpacity === 0) return;
 
                 // The camera translates/scales world coordinates; the source
@@ -2097,6 +2196,7 @@ const level = {
                 !level.isFlipping;
             if (isInside) {
                 level.exitCount += m.health < 0 ? 0.5 : 2
+                if (m.immuneCycle < m.cycle + 1) m.immuneCycle = m.cycle + 1; //player is immune to damage while standing in the exit
             } else if (level.exitCount > 0) {
                 level.exitCount -= 2
             }
@@ -2111,7 +2211,7 @@ const level = {
             }
 
             const chargeProgress = Math.max(0, Math.min(1, level.exitCount / level.exit.chargeThreshold));
-            const ripple = level.exit.isInverted ? null : level.exit.updateRipple();
+            const ripple = level.exit.isInverted || localSettings.isHideHUD ? null : level.exit.updateRipple(); // Performance mode: no ripples.
             ctx.beginPath();
             if (level.exit.isInverted) {
                 ctx.moveTo(x, y + verticalSign * bottomOffset);
@@ -3159,98 +3259,160 @@ const level = {
         door.classType = "map"
         return door
     },
-    portal(centerA, angleA, centerB, angleB) {
-        let draw, query
+    portalExit: { //how things leave a portal, see level.portal()
+        //straight out at the speed you went in (6 to 50), speed along the portal is lost
+        straight: { measure: "total", scale: 1, min: 6, max: 50, boost: 0, keepSlide: false, spread: 0 },
+        //straight out at 21 to 61, faster when you are falling fast as you go in, speed along the portal is lost
+        //blocks come out rotated a bit randomly so they don't get stuck endlessly in vertical portals
+        launch: { measure: "fall", scale: 0.8, min: 10, max: 50, boost: 11, keepSlide: false, spread: 0.5 },
+    },
+    portalExitSettings(unit, exit, depth = 0) { //fills in the exit settings left out, see level.portal()
+        const up = Math.max(0, -unit.y) //1 for a portal facing straight up
+        return Object.assign({
+            measure: "into",
+            scale: 1 - 0.2 * up, //lose some speed on the way up, so portal loops don't gain energy
+            min: 6 + 4 * up,
+            max: 50,
+            boost: 11 * up, //extra lift to fight gravity
+            keepSlide: true,
+            spread: 0,
+            depth: depth,
+        }, exit)
+    },
+    portalExitVelocity(v, from, to) { //velocity v going into portal end from, comes out of portal end to, ends need a unit and exit settings
+        const exit = to.exit
+        const measured = exit.measure === "total" ? Vector.magnitude(v) : exit.measure === "fall" ? v.y : -Vector.dot(v, from.unit)
+        let velocity = Vector.mult(to.unit, Math.max(exit.min, Math.min(exit.max, exit.scale * measured)) + exit.boost)
+        if (exit.keepSlide) { //flip the slide direction if needed so falling into a sideways portal still falls out of a sideways portal
+            const slideFrom = Vector.perp(from.unit)
+            const slideTo = Vector.perp(to.unit)
+            const slide = Vector.dot(v, slideFrom) * (Vector.dot(slideFrom, slideTo) < 0 ? -1 : 1)
+            velocity = Vector.add(velocity, Vector.mult(slideTo, slide))
+        }
+        return velocity
+    },
+    portalExtent(who, axis) { //how far the solid parts of who reach along axis from its position, bounds can't be used because they stretch with velocity
+        let min = Infinity
+        let max = -Infinity
+        for (let i = who.parts.length > 1 ? 1 : 0; i < who.parts.length; i++) {
+            if (who.parts[i].isSensor && who.parts.length > 1) continue //like the player's jump sensor, which sinks into slopes
+            const vertices = who.parts[i].vertices
+            for (let j = 0; j < vertices.length; j++) {
+                const d = (vertices[j].x - who.position.x) * axis.x + (vertices[j].y - who.position.y) * axis.y
+                if (d < min) min = d
+                if (d > max) max = d
+            }
+        }
+        return { min, max }
+    },
+    //exitA and exitB set how the player and blocks leave portal A and portal B, they are plain objects with any of:
+    //  measure: which incoming speed sets the exit speed, "into" the portal, "total" speed, or "fall" (downward speed)
+    //  scale, min, max, boost: exit speed = clamp(scale * measured speed, min, max) + boost, fired straight out of the portal
+    //  keepSlide: also keep the speed along the portal face
+    //  spread: random angle added to the exit direction of blocks
+    //  depth: how far behind the portal face things come out, defaults to the middle of the hole behind portals that face left, right, up or down
+    //leave them out for real momentum, what goes in comes out, with some extra lift for portals that face up
+    //level.portalExit has the settings the original portals used
+    portal(centerA, angleA, centerB, angleB, exitA, exitB) {
         const width = 50
         const height = 150
         const mapWidth = 200
         const unitA = Matter.Vector.rotate({ x: 1, y: 0 }, angleA)
         const unitB = Matter.Vector.rotate({ x: 1, y: 0 }, angleB)
-        draw = function () {
+        const makeExit = (unit, exit) => {
+            const isStraight = Math.abs(unit.x) < 1e-6 || Math.abs(unit.y) < 1e-6 //facing left, right, up or down
+            return level.portalExitSettings(unit, exit, isStraight ? 0.5 * mapWidth : 0)
+        }
+        const isTouching = (portal, who) => Matter.Bounds.overlaps(portal.bounds, who.bounds) && Matter.Query.collides(portal, [who]).length > 0
+        const exitVelocity = (who, from, to) => level.portalExitVelocity(who.velocity, from, to)
+        const halfSize = (who, axis) => {
+            const extent = level.portalExtent(who, axis)
+            return 0.5 * (extent.max - extent.min)
+        }
+        const exitPosition = (who, to) => {
+            if (halfSize(who, Vector.perp(to.unit)) > 0.5 * height + 5) { //too big for the hole behind the portal, so come out clear of the portal face
+                return Vector.add(to.portal.position, Vector.mult(to.unit, halfSize(who, to.unit) + 5))
+            }
+            return Vector.sub(to.portal.position, Vector.mult(to.unit, to.exit.depth))
+        }
+        const bulletExit = { measure: "into", scale: 1, min: 0, max: Infinity, boost: 0, keepSlide: true } //bullets keep their speed exactly
+        const isTouchingSoon = (portal, who) => { //bullets are caught a step early, before map around the portal can stop them and change their speed
+            if (!Matter.Bounds.overlaps(portal.bounds, who.bounds)) return false //Matter stretches bounds by velocity, so this also covers where it's going
+            if (Matter.Query.collides(portal, [who]).length > 0) return true
+            for (let i = 0; i < who.vertices.length; i++) {
+                if (Matter.Vertices.contains(portal.vertices, { x: who.vertices[i].x + who.velocity.x, y: who.vertices[i].y + who.velocity.y })) return true
+            }
+            return false
+        }
+        const inFrontOf = (to) => Vector.add(to.portal.position, Vector.add(Vector.mult(to.unit, 50 + 150 * Math.random()), Vector.mult(Vector.perp(to.unit), 150 * (Math.random() - 0.5))))
+        const draw = function () {
             ctx.beginPath(); //portal
             let v = this.vertices;
             ctx.moveTo(v[0].x, v[0].y);
             for (let i = 1; i < v.length; ++i) ctx.lineTo(v[i].x, v[i].y);
-            ctx.fillStyle = this.color
+            ctx.fillStyle = this.portal ? simulation.draw.mapColor(this.color) : this.color //the block behind the portal looks like the map
             ctx.fill();
         }
-        query = function (isRemoveBlocks = false) {
-            if (Matter.Query.collides(this, [player]).length === 0) { //not touching player
+        const query = function (isRemoveBlocks = false) {
+            const to = this.portalPair
+            if (!isTouching(this, player)) {
                 if (player.isInPortal === this) player.isInPortal = null
             } else if (player.isInPortal !== this) { //touching player    //&& !(player.scale > 1)
                 if (m.buttonCD_jump === m.cycle) player.force.y = 0 // undo a jump right before entering the portal
                 m.buttonCD_jump = 0 //disable short jumps when letting go of jump key
-                player.isInPortal = this.portalPair
-                //teleport
-                if (this.portalPair.angle % (Math.PI / 2)) { //if left, right up or down
-                    if (m.immuneCycle < m.cycle + m.collisionImmuneCycles) m.immuneCycle = m.cycle + m.collisionImmuneCycles; //player is immune to damage for 30 cycles
-                    // Matter.Body.setPosition(player, this.portalPair.portal.position);
-                    simulation.translatePlayerAndCamera(this.portalPair.portal.position)
-                } else { //if at some odd angle
-                    if (m.immuneCycle < m.cycle + m.collisionImmuneCycles) m.immuneCycle = m.cycle + m.collisionImmuneCycles; //player is immune to damage for 30 cycles
-                    // Matter.Body.setPosition(player, this.portalPair.position);
-                    simulation.translatePlayerAndCamera(this.portalPair.position)
-                }
-                //rotate velocity
-                let mag
-                if (this.portalPair.angle !== 0 && this.portalPair.angle !== Math.PI) { //portal that fires the player up
-                    mag = Math.max(10, Math.min(50, player.velocity.y * 0.8)) + 11
-                } else {
-                    mag = Math.max(6, Math.min(50, Vector.magnitude(player.velocity)))
-                }
-                let v = Vector.mult(this.portalPair.unit, mag)
-                Matter.Body.setVelocity(player, v);
-                if (tech.isHealAttract) {  //send heals to next portal
+                player.isInPortal = to
+                if (m.immuneCycle < m.cycle + 30) m.immuneCycle = m.cycle + 30; //player is immune to damage for 30 cycles, not m.collisionImmuneCycles so Pauli exclusion doesn't trigger
+                const velocity = exitVelocity(player, this, to)
+                simulation.translatePlayerAndCamera(exitPosition(player, to))
+                Matter.Body.setVelocity(player, velocity);
+                if (tech.isHealAttract) { //send nearby heals out of the other portal
                     for (let i = 0; i < powerUp.length; i++) {
-                        if (powerUp[i].name === "heal") {
-                            Matter.Body.setPosition(powerUp[i], Vector.add(this.portalPair.portal.position, { x: 500 * (Math.random() - 0.5), y: 500 * (Math.random() - 0.5) }));
+                        if (powerUp[i].name === "heal" && Vector.magnitudeSquared(Vector.sub(powerUp[i].position, this.portal.position)) < 1000000) {
+                            Matter.Body.setPosition(powerUp[i], inFrontOf(to));
                         }
                     }
                 }
-                if (tech.isForeverDrones) { //send drones to next portal
+                if (tech.isForeverDrones) { //send drones out of the other portal
                     for (let i = 0; i < bullet.length; i++) {
-                        if (bullet[i].endCycle === Infinity) {
-                            Matter.Body.setPosition(bullet[i], Vector.add(this.portalPair.portal.position, { x: 500 * (Math.random() - 0.5), y: 500 * (Math.random() - 0.5) }));
-                        }
+                        if (bullet[i].endCycle === Infinity) Matter.Body.setPosition(bullet[i], inFrontOf(to));
                     }
                 }
             }
-            for (let i = 0, len = body.length; i < len; i++) {
-                if (body[i] !== m.holdingTarget) {
-                    // body[i].bounds.max.x - body[i].bounds.min.x < 100 && body[i].bounds.max.y - body[i].bounds.min.y < 100
-                    if (Matter.Query.collides(this, [body[i]]).length === 0) {
-                        if (body[i].isInPortal === this) body[i].isInPortal = null
-                    } else if (body[i].isInPortal !== this) { //touching this portal, but for the first time
-                        if (isRemoveBlocks && !body[i].isInvulnerable && !body[i].isImmutable) {
-                            // console.log(body[i])
-                            Matter.Composite.remove(engine.world, body[i]);
-                            body.splice(i, 1);
-                            break
-                        }
-                        body[i].isInPortal = this.portalPair
-                        //teleport
-                        if (this.portalPair.angle % (Math.PI / 2)) { //if left, right up or down
-                            Matter.Body.setPosition(body[i], this.portalPair.portal.position);
-                        } else { //if at some odd angle
-                            Matter.Body.setPosition(body[i], this.portalPair.position);
-                        }
-                        //rotate velocity
-                        let mag
-                        if (this.portalPair.angle !== 0 && this.portalPair.angle !== Math.PI) { //portal that fires up
-                            mag = Math.max(10, Math.min(50, body[i].velocity.y * 0.8)) + 11
-                            let v = Vector.mult(this.portalPair.unit, mag)
-                            //rotate the velocity vector of blocks fired directly up to keep them from getting stuck endlessly in vertical portals
-                            Matter.Body.setVelocity(body[i], Vector.rotate(v, 0.5 * (Math.random() - 0.5)));
-                        } else {
-                            mag = Math.max(6, Math.min(50, Vector.magnitude(body[i].velocity)))
-                            let v = Vector.mult(this.portalPair.unit, mag)
-                            Matter.Body.setVelocity(body[i], v);
-                        }
-
+            for (let i = body.length - 1; i > -1; i--) {
+                const who = body[i]
+                if (who === m.holdingTarget) continue
+                if (!isTouching(this, who)) {
+                    if (who.isInPortal === this) who.isInPortal = null
+                } else if (who.isInPortal !== this) { //touching this portal, but for the first time
+                    if (isRemoveBlocks && !who.isInvulnerable && !who.isImmutable) {
+                        Matter.Composite.remove(engine.world, who);
+                        body.splice(i, 1);
+                        continue
                     }
+                    who.isInPortal = to
+                    const velocity = exitVelocity(who, this, to)
+                    Matter.Body.setPosition(who, exitPosition(who, to));
+                    Matter.Body.setVelocity(who, to.exit.spread ? Vector.rotate(velocity, to.exit.spread * (Math.random() - 0.5)) : velocity);
                 }
             }
-
+            for (let i = 0; i < bullet.length; i++) { //bullets fly into the hole behind the portal, since the block there doesn't stop them
+                const who = bullet[i]
+                if (who.botType || who.isInHole || who.drawStringFlip !== undefined) continue //not bots, the plasma extruder, or harpoons and hooks tied to the player
+                if (!isTouchingSoon(this, who)) {
+                    if (who.isInPortal === this) who.isInPortal = null
+                } else if (who.isInPortal !== this) {
+                    who.isInPortal = to
+                    //keep the bullet's speed exactly, and its place along the portal so a spread of shots stays spread out
+                    const velocity = level.portalExitVelocity(who.velocity, this, { unit: to.unit, exit: bulletExit })
+                    const slideFrom = Vector.perp(this.unit)
+                    const slideTo = Vector.perp(to.unit)
+                    const across = Math.max(-0.5 * height, Math.min(0.5 * height, Vector.dot(Vector.sub(who.position, this.portal.position), slideFrom))) * (Vector.dot(slideFrom, slideTo) < 0 ? -1 : 1)
+                    //come out just in front of the portal face, since some levels have map in the hole behind a portal
+                    Matter.Body.setPosition(who, Vector.add(Vector.add(to.portal.position, Vector.mult(to.unit, 3 - level.portalExtent(who, to.unit).min)), Vector.mult(slideTo, across)))
+                    Matter.Body.setAngle(who, who.angle + Math.atan2(velocity.y, velocity.x) - Math.atan2(who.velocity.y, who.velocity.x)) //turn with the velocity, so missiles and nails point the new way
+                    Matter.Body.setVelocity(who, velocity)
+                }
+            }
         }
 
         const portalA = composite[composite.length] = Bodies.rectangle(centerA.x, centerA.y, width, height, {
@@ -3270,9 +3432,10 @@ const level = {
         const mapA = composite[composite.length] = Bodies.rectangle(centerA.x - 0.5 * unitA.x * mapWidth, centerA.y - 0.5 * unitA.y * mapWidth, mapWidth, height + 10, {
             collisionFilter: {
                 category: cat.map,
-                mask: cat.bullet | cat.powerUp | cat.mob | cat.mobBullet //cat.player | cat.map | cat.body | cat.bullet | cat.powerUp | cat.mob | cat.mobBullet
+                mask: cat.powerUp | cat.mob | cat.mobBullet //the player, blocks, and bullets go into the hole behind the portal
             },
             unit: unitA,
+            exit: makeExit(unitA, exitA),
             angle: angleA,
             color: color.map,
             draw: draw,
@@ -3284,9 +3447,10 @@ const level = {
         const mapB = composite[composite.length] = Bodies.rectangle(centerB.x - 0.5 * unitB.x * mapWidth, centerB.y - 0.5 * unitB.y * mapWidth, mapWidth, height + 10, {
             collisionFilter: {
                 category: cat.map,
-                mask: cat.bullet | cat.powerUp | cat.mob | cat.mobBullet //cat.player | cat.map | cat.body | cat.bullet | cat.powerUp | cat.mob | cat.mobBullet
+                mask: cat.powerUp | cat.mob | cat.mobBullet //the player, blocks, and bullets go into the hole behind the portal
             },
             unit: unitB,
+            exit: makeExit(unitB, exitB),
             angle: angleB,
             color: color.map,
             draw: draw,
@@ -3299,7 +3463,525 @@ const level = {
         mapB.portal = portalB
         mapA.portalPair = mapB
         mapB.portalPair = mapA
-        return [portalA, portalB, mapA, mapB]
+        const pair = [portalA, portalB, mapA, mapB]
+        pair.query = (isRemoveBlocks = false) => { //teleport the player, blocks, and bullets, call once per cycle in level.custom
+            mapA.query(isRemoveBlocks)
+            mapB.query(isRemoveBlocks)
+        }
+        pair.draw = () => { //call in level.customTopLayer
+            portalA.draw()
+            portalB.draw()
+            mapA.draw()
+            mapB.draw()
+        }
+        return pair
+    },
+    surfacePortals: [], //surface portals in this level, engine.js runs them during each physics step
+    //prototype portal pair that sits flat on the map, so it doesn't need a hole behind it
+    //things that land on it are caught in collisionStart before the map pushes back, so they keep their speed
+    //exitA and exitB work like level.portal(), place ends with place() or placeAlongRay() and call draw() in level.customTopLayer
+    //set isBulletPass to let bullets through, onPlayerExit() to react after the player comes out, and onPowerUpEnter(who, to) to catch power ups, see the portal field
+    surfacePortal(exitA, exitB) {
+        const fullHalf = 75 //half the width of a portal
+        const smallestHalf = 25 //portals can shrink to fit small faces, down to 50 long at any size
+        const makeEnd = (color, exitGiven) => ({ color, exitGiven, isPlaced: false })
+        const pair = {
+            ends: [makeEnd("hsla(197, 100%, 50%,", exitA), makeEnd("hsla(29, 100%, 50%,", exitB)],
+            pending: [], //things going through a portal after this physics step, { who, velocity, from }
+            isBulletPass: false,
+            onPlayerExit: null,
+            onPowerUpEnter: null, //if set, power ups that go in are handed to this instead of coming out
+            place(index, position, angle, half = fullHalf) {
+                const end = this.ends[index]
+                end.isPlaced = true
+                end.half = half
+                end.placedCycle = simulation.cycle //for the opening animation in draw()
+                end.position = { x: position.x, y: position.y }
+                end.angle = angle
+                end.unit = Vector.rotate({ x: 1, y: 0 }, angle) //points out of the portal
+                end.tangent = Vector.perp(end.unit) //points along the portal
+                end.exit = level.portalExitSettings(end.unit, end.exitGiven)
+                const reach = { //a box around the portal for quick checks
+                    x: Math.abs(end.tangent.x) * (half + 10) + Math.abs(end.unit.x) * 60,
+                    y: Math.abs(end.tangent.y) * (half + 10) + Math.abs(end.unit.y) * 60
+                }
+                end.bounds = { min: Vector.sub(end.position, reach), max: Vector.add(end.position, reach) }
+            },
+            placeAlongRay(index, start, target, size = 1) { //put a portal end on the first map face hit by the ray from start toward target, returns false if it doesn't fit, size scales the portal
+                const largestHalf = fullHalf * size
+                const ray = Vector.mult(Vector.normalise(Vector.sub(target, start)), 8000)
+                const end = Vector.add(start, ray)
+                const rayBounds = { min: { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y) }, max: { x: Math.max(start.x, end.x), y: Math.max(start.y, end.y) } }
+                let hit = null //the closest face the ray crosses, t is how far along the ray and s is how far along the face
+                for (let i = 0; i < map.length; i++) {
+                    if (!Matter.Bounds.overlaps(rayBounds, map[i].bounds)) continue
+                    const parts = map[i].parts
+                    for (let p = parts.length > 1 ? 1 : 0; p < parts.length; p++) {
+                        const v = parts[p].vertices
+                        for (let j = 0; j < v.length; j++) {
+                            const a = v[j]
+                            const b = v[(j + 1) % v.length]
+                            const face = Vector.sub(b, a)
+                            const denominator = Vector.cross(ray, face)
+                            if (denominator === 0) continue //parallel
+                            const toA = Vector.sub(a, start)
+                            const t = Vector.cross(toA, face) / denominator
+                            const s = Vector.cross(toA, ray) / denominator
+                            if (t >= 0 && t <= 1 && s >= 0 && s <= 1 && (!hit || t < hit.t)) hit = { t, s, a, b }
+                        }
+                    }
+                }
+                if (!hit) return false
+                const length = Vector.magnitude(Vector.sub(hit.b, hit.a))
+                if (length < 2 * smallestHalf - 0.02) return false //the face is too small
+                const tangent = Vector.normalise(Vector.sub(hit.b, hit.a))
+                let unit = Vector.perp(tangent)
+                if (Vector.dot(unit, ray) > 0) unit = Vector.neg(unit) //point out of the face, back toward the ray
+                //find the open stretches of the face near where the ray hit, then fit the biggest portal it can in the one closest to the aim
+                //the face is blocked where another map piece covers it, or where the other portal is
+                const other = this.ends[1 - index]
+                const isOtherOnFace = other.isPlaced && Vector.dot(other.unit, unit) > 0.99 && Math.abs(Vector.dot(Vector.sub(hit.a, other.position), unit)) < 5
+                const otherAlong = isOtherOnFace ? Vector.dot(Vector.sub(other.position, hit.a), tangent) : 0
+                const isSolid = (point) => Matter.Query.point(map, point).length > 0
+                const isOpen = (along) => {
+                    if (isOtherOnFace && Math.abs(along - otherAlong) < other.half) return false
+                    const point = Vector.add(hit.a, Vector.mult(tangent, along))
+                    return !isSolid(Vector.add(point, Vector.mult(unit, 5))) && !isSolid(Vector.add(point, Vector.mult(unit, 40)))
+                }
+                const aim = hit.s * length
+                const step = 5
+                const first = Math.max(0, aim - 400)
+                const last = Math.min(length, aim + 400)
+                const samples = [] //every step along the face near the aim, and both ends of that stretch
+                for (let along = first; along < last; along += step) samples.push(along)
+                samples.push(last)
+                let best = null
+                let openStart = null
+                let openEnd = null
+                for (let i = 0; i <= samples.length; i++) {
+                    if (i < samples.length && isOpen(samples[i])) {
+                        if (openStart === null) openStart = samples[i]
+                        openEnd = samples[i]
+                    } else if (openStart !== null) { //an open stretch from openStart to openEnd
+                        const half = Math.min(largestHalf, 0.5 * (openEnd - openStart)) //shrink to fit, down to 50 long
+                        if (half >= smallestHalf - 0.01) {
+                            const center = Math.max(openStart + half, Math.min(openEnd - half, aim)) //nudged to fit
+                            const distance = Math.abs(center - aim)
+                            if (!best || distance < best.distance || (distance === best.distance && half > best.half)) best = { center, half, distance }
+                        }
+                        openStart = null
+                    }
+                }
+                if (!best) return false
+                this.place(index, Vector.add(hit.a, Vector.mult(tangent, best.center)), Math.atan2(unit.y, unit.x), best.half)
+                return true
+            },
+            isOver(who, end, low, high) { //is who centered over the portal and small enough to fit both portals, with its closest edge between low and high from the portal face
+                const offset = Vector.sub(who.position, end.position)
+                const along = level.portalExtent(who, end.tangent)
+                if (along.max - along.min > 2 * end.half + 16) return false //too big for this portal
+                const to = this.ends[end === this.ends[0] ? 1 : 0]
+                const alongExit = level.portalExtent(who, to.tangent)
+                if (alongExit.max - alongExit.min > 2 * to.half + 16) return false //too big to come out of the other portal
+                if (Math.abs(Vector.dot(offset, end.tangent) + 0.5 * (along.min + along.max)) > end.half - 15) return false //the middle of who isn't over the portal
+                const edge = Vector.dot(offset, end.unit) + level.portalExtent(who, end.unit).min
+                return edge > low && edge < high
+            },
+            isNearFace(collision, end, reach) { //is a contact point on the portal, up to reach deep
+                for (let i = 0; i < collision.supports.length; i++) {
+                    const offset = Vector.sub(collision.supports[i], end.position)
+                    const depth = Vector.dot(offset, end.unit)
+                    if (Math.abs(Vector.dot(offset, end.tangent)) < end.half + 5 && depth > -reach && depth < 10) return true
+                }
+                return false
+            },
+            canUse(who) {
+                if (who === player) return true
+                if (who.classType === "body") return who !== m.holdingTarget && body.includes(who)
+                if (who.collisionFilter.category === cat.powerUp) return powerUp.includes(who)
+                return this.isBulletPass && !who.botType && !who.isInHole && who.drawStringFlip === undefined && bullet.includes(who) //not bots, the plasma extruder, or harpoons and hooks tied to the player
+            },
+            enter(who, velocity, from) {
+                for (let i = 0; i < this.pending.length; i++) {
+                    if (this.pending[i].who === who) return
+                }
+                this.pending.push({ who, velocity: { x: velocity.x, y: velocity.y }, from })
+            },
+            collide(event) { //runs at the start of collisionStart, before the map pushes back
+                if (!this.ends[0].isPlaced || !this.ends[1].isPlaced) return
+                const pairs = event.pairs
+                for (let i = pairs.length - 1; i > -1; i--) {
+                    let part = pairs[i].bodyA
+                    let other = pairs[i].bodyB
+                    if (!other.isStatic) {
+                        part = pairs[i].bodyB
+                        other = pairs[i].bodyA
+                    }
+                    if (!other.isStatic || other.isSensor || part.isStatic) continue
+                    const who = part.parent
+                    for (let j = 0; j < 2; j++) {
+                        const end = this.ends[j]
+                        const into = -Vector.dot(who.velocity, end.unit)
+                        const reach = Math.max(60, into + 10) //fast things like bullets can sink deeper in one step
+                        if (into > 0 && this.isNearFace(pairs[i].collision, end, reach) && this.isOver(who, end, -reach, 10) && this.canUse(who)) {
+                            this.enter(who, who.velocity, end)
+                            pairs[i].isActive = false //the map doesn't push back
+                            pairs.splice(i, 1) //and it doesn't count as landing
+                            break
+                        }
+                    }
+                }
+            },
+            update() { //runs after each physics step
+                if (!this.ends[0].isPlaced || !this.ends[1].isPlaced) {
+                    this.pending.length = 0
+                    return
+                }
+                for (let j = 0; j < 2; j++) { //things already resting on a portal fall in, like when a portal is placed under them
+                    const end = this.ends[j]
+                    if (Matter.Bounds.overlaps(end.bounds, player.bounds) && Vector.dot(player.velocity, end.unit) < 0.5 && this.isOver(player, end, -8, 3)) this.enter(player, player.velocity, end)
+                    for (let i = 0; i < body.length; i++) {
+                        if (Matter.Bounds.overlaps(end.bounds, body[i].bounds) && body[i] !== m.holdingTarget && Vector.dot(body[i].velocity, end.unit) < 0.5 && this.isOver(body[i], end, -8, 3)) this.enter(body[i], body[i].velocity, end)
+                    }
+                    for (let i = 0; i < powerUp.length; i++) {
+                        if (Matter.Bounds.overlaps(end.bounds, powerUp[i].bounds) && Vector.dot(powerUp[i].velocity, end.unit) < 0.5 && this.isOver(powerUp[i], end, -8, 3)) this.enter(powerUp[i], powerUp[i].velocity, end)
+                    }
+                    if (this.isBulletPass) { //bullets that pass through the map, like foam, never touch the portal, so check if they crossed it this step
+                        for (let i = 0; i < bullet.length; i++) {
+                            const who = bullet[i]
+                            if (who.collisionFilter.mask & cat.map || who.botType || who.isInHole || who.drawStringFlip !== undefined) continue
+                            const now = Vector.sub(who.position, end.position)
+                            if (Vector.dot(now, end.unit) < 0 && Vector.dot(Vector.sub(who.positionPrev, end.position), end.unit) >= 0 && Math.abs(Vector.dot(now, end.tangent)) < end.half) this.enter(who, who.velocity, end)
+                        }
+                    }
+                }
+                for (let i = 0; i < this.pending.length; i++) this.teleport(this.pending[i])
+                this.pending.length = 0
+            },
+            bulletExit: { measure: "into", scale: 1, min: 0, max: Infinity, boost: 0, keepSlide: true }, //bullets keep their speed exactly
+            teleport({ who, velocity, from }) {
+                const to = this.ends[from === this.ends[0] ? 1 : 0]
+                const along = level.portalExtent(who, to.tangent)
+                const out = level.portalExtent(who, to.unit)
+                let across = -0.5 * (along.min + along.max) //centered on the portal
+                if (this.onPowerUpEnter && who.collisionFilter.category === cat.powerUp && powerUp.includes(who)) {
+                    this.onPowerUpEnter(who, to)
+                    return
+                }
+                const isBullet = bullet.includes(who) //power ups come out like blocks
+                if (isBullet) { //bullets keep their place along the portal, so a spread of shots stays spread out
+                    const flip = Vector.dot(from.tangent, to.tangent) < 0 ? -1 : 1 //matches how the slide speed flips
+                    const room = Math.max(0, to.half - 0.5 * (along.max - along.min))
+                    across += Math.max(-room, Math.min(room, flip * Vector.dot(Vector.sub(who.position, from.position), from.tangent)))
+                }
+                const where = Vector.add(to.position, Vector.add(Vector.mult(to.unit, 3 - out.min), Vector.mult(to.tangent, across))) //just in front of the portal
+                if (isBullet) {
+                    const exitVelocity = level.portalExitVelocity(velocity, from, { unit: to.unit, exit: this.bulletExit })
+                    Matter.Body.setPosition(who, where)
+                    Matter.Body.setAngle(who, who.angle + Math.atan2(exitVelocity.y, exitVelocity.x) - Math.atan2(velocity.y, velocity.x)) //turn with the velocity, so missiles and nails point the new way
+                    Matter.Body.setVelocity(who, exitVelocity)
+                    return
+                }
+                if (who === player) {
+                    m.buttonCD_jump = 0 //disable short jumps when letting go of jump key
+                    if (m.immuneCycle < m.cycle + 30) m.immuneCycle = m.cycle + 30; //not m.collisionImmuneCycles so Pauli exclusion doesn't trigger
+                    simulation.translatePlayerAndCamera(where)
+                } else {
+                    Matter.Body.setPosition(who, where)
+                }
+                Matter.Body.setVelocity(who, level.portalExitVelocity(velocity, from, to))
+                if (who === player && this.onPlayerExit) this.onPlayerExit()
+            },
+            draw() {
+                for (let j = 0; j < 2; j++) {
+                    const end = this.ends[j]
+                    if (!end.isPlaced) continue
+                    ctx.save()
+                    ctx.translate(end.position.x, end.position.y)
+                    ctx.rotate(end.angle)
+                    const opening = Math.min(1, Math.max(0, (simulation.cycle - end.placedCycle) / 10)) //new portals grow to full size over 10 cycles
+                    const half = end.half * (1 - (1 - opening) * (1 - opening)) //ease out
+                    const glow = ctx.createLinearGradient(0, 0, 70, 0)
+                    glow.addColorStop(0, end.color + "0.45)")
+                    glow.addColorStop(1, end.color + "0)")
+                    ctx.fillStyle = glow
+                    ctx.fillRect(0, -half, 70, 2 * half)
+                    ctx.fillStyle = end.color + "0.95)"
+                    ctx.fillRect(-4, -half, 9, 2 * half)
+                    ctx.restore()
+                }
+            },
+            flipVertical() { //for levels that flip the map upside down by turning every y into -y, see flipAndRemove() in interferometer and gravitron
+                this.pending.length = 0
+                for (let j = 0; j < 2; j++) {
+                    const end = this.ends[j]
+                    if (!end.isPlaced) continue
+                    const placedCycle = end.placedCycle
+                    this.place(j, { x: end.position.x, y: -end.position.y }, -end.angle, end.half) //a floor portal becomes a ceiling portal
+                    end.placedCycle = placedCycle //don't replay the opening animation
+                }
+            },
+            viewRadius: 2000, //how far behind each portal you can see out of the other one
+            isViewOn: true, //draw the views through the portals, the portal field turns this on and off with ↑↓↑↓↑
+            isViewInMapOnly: false, //false: the view covers whatever is behind the portal, like a window, true: only where the map is
+            drawViews() { //behind each portal, show the area in front of the other portal
+                //the part of that area on screen is copied from the canvas like level.mirror(), with every effect
+                //the part off screen is redrawn with simple shapes, see drawShapes()
+                if (!this.ends[0].isPlaced || !this.ends[1].isPlaced || !simulation.draw.mapPath) return
+                const camera = ctx.getTransform() //world to canvas pixels
+                const toWorld = camera.inverse()
+                //the copy stays 3 pixels inside the canvas edge, where drawImage blurs in transparent pixels from outside the canvas
+                //and the redraw reaches 3 pixels further under the copy, so their soft clip edges overlap instead of leaving a thin gap
+                const screenRect = inset => [[inset, inset], [canvas.width - inset, inset], [canvas.width - inset, canvas.height - inset], [inset, canvas.height - inset]].map(([x, y]) => toWorld.transformPoint(new DOMPoint(x, y)))
+                const copyScreen = screenRect(3)
+                const redrawScreen = screenRect(6)
+                const screenBounds = { min: { x: Math.min(redrawScreen[0].x, redrawScreen[2].x), y: Math.min(redrawScreen[0].y, redrawScreen[2].y) }, max: { x: Math.max(redrawScreen[0].x, redrawScreen[2].x), y: Math.max(redrawScreen[0].y, redrawScreen[2].y) } }
+                for (let j = 0; j < 2; j++) {
+                    const from = this.ends[j] //the view is drawn behind this portal
+                    const to = this.ends[1 - j] //of the area in front of this portal
+                    //a point at some depth behind "from" matches the point that far in front of "to", and the offset along the portal flips like the slide speed in level.portalExitVelocity()
+                    //so the linear part L turns from.unit into -to.unit and from.tangent into flip * to.tangent
+                    const flip = Vector.dot(from.tangent, to.tangent) < 0 ? -1 : 1
+                    const L00 = -to.unit.x * from.unit.x + flip * to.tangent.x * from.tangent.x
+                    const L01 = -to.unit.x * from.unit.y + flip * to.tangent.x * from.tangent.y
+                    const L10 = -to.unit.y * from.unit.x + flip * to.tangent.y * from.tangent.x
+                    const L11 = -to.unit.y * from.unit.y + flip * to.tangent.y * from.tangent.y
+                    //"back" maps the area in front of "to" back behind "from", L is a rotation or a reflection so its inverse is its transpose
+                    const back = new DOMMatrix([L00, L01, L10, L11, from.position.x - (L00 * to.position.x + L10 * to.position.y), from.position.y - (L01 * to.position.x + L11 * to.position.y)])
+                    const ahead = back.inverse() //maps behind "from" to in front of "to"
+                    const opening = Math.min(1, Math.max(0, (simulation.cycle - from.placedCycle) / 10)) //match the opening animation in draw()
+                    //the view is what the player could see looking through "from", see sightOutline(), it grows in with the portal's opening animation
+                    const outline = this.sightOutline(from, to, ahead, this.viewRadius * (1 - (1 - opening) * (1 - opening)))
+                    if (!outline) continue
+                    const zone = new Path2D()
+                    zone.moveTo(outline[0].x, outline[0].y)
+                    for (let i = 1; i < outline.length; i++) zone.lineTo(outline[i].x, outline[i].y)
+                    zone.closePath()
+                    const lineBack = Vector.sub(from.position, Vector.mult(from.unit, 4)) //start just behind the portal line, so it stays visible
+                    const behindLine = new Path2D()
+                    behindLine.moveTo(lineBack.x + 5000 * from.tangent.x, lineBack.y + 5000 * from.tangent.y)
+                    behindLine.lineTo(lineBack.x - 5000 * from.tangent.x, lineBack.y - 5000 * from.tangent.y)
+                    behindLine.lineTo(lineBack.x - 5000 * from.tangent.x - 5000 * from.unit.x, lineBack.y - 5000 * from.tangent.y - 5000 * from.unit.y)
+                    behindLine.lineTo(lineBack.x + 5000 * from.tangent.x - 5000 * from.unit.x, lineBack.y + 5000 * from.tangent.y - 5000 * from.unit.y)
+                    behindLine.closePath()
+                    const behind = rect => { //a part of the canvas, as the area in front of "to" mapped behind "from"
+                        const path = new Path2D()
+                        for (let i = 0; i < 4; i++) {
+                            const point = back.transformPoint(rect[i])
+                            if (i === 0) {
+                                path.moveTo(point.x, point.y)
+                            } else {
+                                path.lineTo(point.x, point.y)
+                            }
+                        }
+                        path.closePath()
+                        return path
+                    }
+                    const source = outline.map(point => ahead.transformPoint(new DOMPoint(point.x, point.y))) //the area being shown, in front of "to"
+                    const sourceBounds = { min: { x: Math.min(...source.map(p => p.x)), y: Math.min(...source.map(p => p.y)) }, max: { x: Math.max(...source.map(p => p.x)), y: Math.max(...source.map(p => p.y)) } }
+                    const isAllOnScreen = source.every(p => p.x > screenBounds.min.x && p.x < screenBounds.max.x && p.y > screenBounds.min.y && p.y < screenBounds.max.y)
+
+                    ctx.save()
+                    ctx.clip(zone) //what the player could see through the portal
+                    ctx.clip(behindLine)
+                    if (this.isViewInMapOnly) ctx.clip(simulation.draw.mapPath) //only where it overlaps the map
+                    //off screen part, redrawn first so the copy covers the overlap
+                    if (!isAllOnScreen) {
+                        ctx.save()
+                        const zoneBounds = { min: { x: Math.min(...outline.map(p => p.x)), y: Math.min(...outline.map(p => p.y)) }, max: { x: Math.max(...outline.map(p => p.x)), y: Math.max(...outline.map(p => p.y)) } }
+                        const offScreen = new Path2D() //everything in the zone outside the redraw edge
+                        offScreen.rect(zoneBounds.min.x - 10, zoneBounds.min.y - 10, zoneBounds.max.x - zoneBounds.min.x + 20, zoneBounds.max.y - zoneBounds.min.y + 20)
+                        offScreen.addPath(behind(redrawScreen))
+                        ctx.clip(offScreen, "evenodd")
+                        ctx.clearRect(zoneBounds.min.x - 10, zoneBounds.min.y - 10, zoneBounds.max.x - zoneBounds.min.x + 20, zoneBounds.max.y - zoneBounds.min.y + 20) //show the background
+                        ctx.setTransform(camera.multiply(back)) //draw the world in front of "to" behind "from"
+                        this.drawShapes(sourceBounds)
+                        ctx.restore()
+                    }
+                    //on screen part, copied from the canvas
+                    //replace what's there, even with transparent pixels where the background shows through
+                    //"copy" would leave the soft clip edge partly transparent, so erase and add like level.mirror(), which blends the edge with what's under it
+                    ctx.save()
+                    ctx.clip(behind(copyScreen))
+                    ctx.globalCompositeOperation = "destination-out"
+                    ctx.fillStyle = "#000"
+                    ctx.fill(zone)
+                    ctx.globalCompositeOperation = "lighter"
+                    ctx.setTransform(camera.multiply(back).multiply(toWorld)) //canvas pixels in front of "to" land behind "from"
+                    ctx.drawImage(canvas, 0, 0)
+                    ctx.restore()
+                    ctx.fillStyle = from.color + "0.12)" //tint the view with this portal's color
+                    ctx.fill(zone)
+                    ctx.restore()
+                }
+            },
+            sightOutline(from, to, ahead, radius) { //what the player could see by looking through "from", as points behind "from", or null if the player is behind it
+                //rays from the player's eye through "from" carry on through "to", so cast them from the eye moved through the portals, starting where they leave "to"
+                //each ray stops at the first map edge, or after radius, and it's empty if the map blocks it on the way from the eye to "from"
+                const eye = m.pos
+                if (Vector.dot(Vector.sub(eye, from.position), from.unit) < 2) return null
+                const eyeAhead = ahead.transformPoint(new DOMPoint(eye.x, eye.y)) //the eye moved through the portals, it ends up behind "to"
+                const flip = Vector.dot(from.tangent, to.tangent) < 0 ? -1 : 1 //a point s along "from" is flip * s along "to"
+                const edgesIn = (minX, minY, maxX, maxY) => { //map edges with bounds inside the box, as [ax, ay, bx, by]
+                    const edges = []
+                    for (let i = 0; i < map.length; i++) {
+                        const bounds = map[i].bounds
+                        if (bounds.max.x < minX || bounds.min.x > maxX || bounds.max.y < minY || bounds.min.y > maxY) continue
+                        const parts = map[i].parts
+                        for (let p = parts.length > 1 ? 1 : 0; p < parts.length; p++) {
+                            const v = parts[p].vertices
+                            for (let k = 0; k < v.length; k++) {
+                                const a = v[k]
+                                const b = v[(k + 1) % v.length]
+                                edges.push(a.x, a.y, b.x, b.y)
+                            }
+                        }
+                    }
+                    return edges
+                }
+                const firstHit = (edges, sx, sy, ex, ey) => { //fraction along the segment to the first edge it crosses, 1 if none
+                    let best = 1
+                    const dx = ex - sx
+                    const dy = ey - sy
+                    for (let k = 0; k < edges.length; k += 4) {
+                        const ax = edges[k], ay = edges[k + 1], fx = edges[k + 2] - ax, fy = edges[k + 3] - ay
+                        const denominator = dx * fy - dy * fx
+                        if (denominator === 0) continue
+                        const t = ((ax - sx) * fy - (ay - sy) * fx) / denominator
+                        if (t <= 0 || t >= best) continue
+                        const u = ((ax - sx) * dy - (ay - sy) * dx) / denominator
+                        if (u >= 0 && u <= 1) best = t
+                    }
+                    return best
+                }
+                const aheadEdges = edgesIn(to.position.x - radius, to.position.y - radius, to.position.x + radius, to.position.y + radius)
+                const ends = [Vector.add(from.position, Vector.mult(from.tangent, from.half)), Vector.sub(from.position, Vector.mult(from.tangent, from.half))]
+                const eyeEdges = edgesIn(Math.min(eye.x, ends[0].x, ends[1].x), Math.min(eye.y, ends[0].y, ends[1].y), Math.max(eye.x, ends[0].x, ends[1].x), Math.max(eye.y, ends[0].y, ends[1].y))
+                //where to cast rays: evenly across the portal, plus just to each side of map corners, so shadow edges are sharp
+                const offsets = []
+                for (let i = 0; i <= 60; i++) offsets.push(from.half * (2 * i / 60 - 1))
+                const addCorner = (x, y, line, eyePoint) => { //the ray from eyePoint through x, y crosses the portal at this offset
+                    const dx = x - eyePoint.x
+                    const dy = y - eyePoint.y
+                    const toward = dx * line.unit.x + dy * line.unit.y
+                    if (Math.abs(toward) < 1e-9) return
+                    const t = ((line.position.x - eyePoint.x) * line.unit.x + (line.position.y - eyePoint.y) * line.unit.y) / toward
+                    if (t <= 0) return
+                    const along = (eyePoint.x + t * dx - line.position.x) * line.tangent.x + (eyePoint.y + t * dy - line.position.y) * line.tangent.y
+                    const offset = line === to ? flip * along : along
+                    if (Math.abs(offset) < from.half) offsets.push(offset - 0.01, offset + 0.01)
+                }
+                for (let k = 0; k < aheadEdges.length; k += 4) { //corners in front of "to"
+                    const x = aheadEdges[k], y = aheadEdges[k + 1]
+                    if ((x - to.position.x) * to.unit.x + (y - to.position.y) * to.unit.y > 0) addCorner(x, y, to, eyeAhead)
+                }
+                for (let k = 0; k < eyeEdges.length; k += 4) addCorner(eyeEdges[k], eyeEdges[k + 1], from, eye) //corners between the eye and "from"
+                offsets.sort((a, b) => a - b)
+                const points = [] //in front of "to", then moved behind "from" at the end
+                for (let i = 0; i < offsets.length; i++) {
+                    const onFrom = Vector.add(from.position, Vector.mult(from.tangent, offsets[i]))
+                    const onTo = Vector.add(to.position, Vector.mult(to.tangent, flip * offsets[i]))
+                    if (i === 0) points.push(onTo)
+                    const nearFrom = Vector.add(onFrom, from.unit) //stop just in front of the portal, not at its own wall
+                    if (firstHit(eyeEdges, eye.x, eye.y, nearFrom.x, nearFrom.y) < 1) { //the map blocks the eye from this part of the portal
+                        points.push(onTo)
+                    } else {
+                        const direction = Vector.normalise(Vector.sub(onTo, eyeAhead))
+                        const start = Vector.add(onTo, direction)
+                        const end = Vector.add(onTo, Vector.mult(direction, radius))
+                        const t = firstHit(aheadEdges, start.x, start.y, end.x, end.y)
+                        points.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t })
+                    }
+                    if (i === offsets.length - 1) points.push(onTo)
+                }
+                const back = ahead.inverse()
+                return points.map(point => back.transformPoint(new DOMPoint(point.x, point.y)))
+            },
+            drawShapes(bounds) { //a simple redraw of the world inside bounds, for views of areas off screen
+                //only draws, it doesn't call any game drawing functions, since many of those also change the game, like m.draw() moving the legs
+                //drawn in the same order as simulation.normalLoop(): power ups, mobs, blocks, player, portals, map, bullets
+                const isNear = who => Matter.Bounds.overlaps(bounds, who.bounds)
+                const addShape = (who) => {
+                    const vertices = who.vertices
+                    ctx.moveTo(vertices[0].x, vertices[0].y)
+                    for (let i = 1; i < vertices.length; i++) ctx.lineTo(vertices[i].x, vertices[i].y)
+                    ctx.closePath()
+                }
+                ctx.globalAlpha = 0.4 * Math.sin(simulation.cycle * 0.15) + 0.6 //power ups, with the same pulsing opacity as powerUps.drawCircle()
+                for (let i = 0; i < powerUp.length; i++) {
+                    if (!isNear(powerUp[i])) continue
+                    ctx.beginPath()
+                    if (powerUp[i].isDuplicated) {
+                        addShape(powerUp[i])
+                    } else {
+                        ctx.arc(powerUp[i].position.x, powerUp[i].position.y, Math.min(powerUp[i].cycle, powerUp[i].size), 0, 2 * Math.PI) //reads the grow-in, powerUps.draw() advances it
+                    }
+                    ctx.fillStyle = powerUp[i].color
+                    ctx.fill()
+                }
+                ctx.globalAlpha = 1
+                ctx.lineWidth = 2
+                for (let i = mob.length - 1; i > -1; i--) { //mobs, last to first like mobs.drawDefault()
+                    if (!isNear(mob[i])) continue
+                    ctx.beginPath()
+                    addShape(mob[i])
+                    ctx.fillStyle = mob[i].fill
+                    ctx.fill()
+                    if (mob[i].stroke !== "transparent") {
+                        ctx.strokeStyle = mob[i].stroke
+                        ctx.stroke()
+                    }
+                }
+                ctx.beginPath() //blocks
+                for (let i = 0; i < body.length; i++) if (isNear(body[i])) addShape(body[i])
+                ctx.fillStyle = color.block
+                ctx.fill()
+                ctx.strokeStyle = color.blockS
+                ctx.stroke()
+                if (isNear(player)) { //the player's body and front leg, from the last time m.draw() ran
+                    ctx.save()
+                    ctx.translate(m.pos.x, m.pos.y)
+                    ctx.save()
+                    ctx.scale(m.flipLegs, 1)
+                    ctx.beginPath()
+                    ctx.moveTo(m.hip.x, m.hip.y)
+                    ctx.lineTo(m.knee.x, m.knee.y)
+                    ctx.lineTo(m.foot.x, m.foot.y)
+                    ctx.strokeStyle = "#333"
+                    ctx.lineWidth = 5
+                    ctx.stroke()
+                    ctx.restore()
+                    ctx.rotate(m.angle)
+                    ctx.beginPath()
+                    ctx.arc(0, 0, 30 * player.scale, 0, 2 * Math.PI)
+                    ctx.fillStyle = m.bodyGradient
+                    ctx.fill()
+                    ctx.lineWidth = 2
+                    ctx.strokeStyle = "#333"
+                    ctx.stroke()
+                    ctx.restore()
+                }
+                this.draw() //portals, drawn in m.hold()
+                ctx.fillStyle = color.map //map, drawn on top of everything so far by simulation.draw.drawMapPath()
+                ctx.fill(simulation.draw.mapPath)
+                ctx.beginPath() //bullets, drawn after the map
+                for (let i = 0; i < bullet.length; i++) if (isNear(bullet[i])) addShape(bullet[i])
+                ctx.fillStyle = color.bullet
+                ctx.fill()
+            },
+        }
+        simulation.ephemera.unshift({ //ephemera run backwards, so this draws after almost everything else
+            name: "portal views",
+            do() {
+                if (!level.surfacePortals.includes(pair)) {
+                    simulation.removeEphemera(this)
+                } else if (pair.isViewOn && !simulation.isTimeSkipping && !localSettings.isHideHUD && !simulation.draw.isLineOfSight()) {
+                    pair.drawViews() //views don't work with line of sight
+                }
+            },
+        })
+        level.surfacePortals.push(pair)
+        return pair
     },
     drip(x, yMin, yMax, period = 100, color = "hsla(160, 100%, 35%, 0.5)") {
         return {
@@ -3865,16 +4547,17 @@ const level = {
     //******************************************************************************************************************
     //******************************************************************************************************************
     initialPowerUps() {
+        const isLorePortals = localSettings.loreCount === 6 //the final lore run starts with portals instead of a gun and a field, right away at any difficulty
+        if (isLorePortals) {
+            m.setField("portal")
+            powerUps.isFieldSpawned = true //so the first boss doesn't drop a field that would replace portals
+        }
         //wait to spawn power ups until unpaused
         //power ups don't spawn in experiment mode, so they don't get removed at the start of experiment mode
         const goal = simulation.cycle + 10
         function cycle() {
             if (simulation.cycle > goal) {
-                if (localSettings.loreCount === 6 && !powerUps.difficulty.equipmentDelay()) {
-                    powerUps.spawn(2095 + 20 * (Math.random() - 0.5), -2170, "field", false);
-                } else {
-                    powerUps.spawnStartingPowerUps(2095 + 20 * (Math.random() - 0.5), -2200);
-                }
+                if (!isLorePortals) powerUps.spawnStartingPowerUps(2095 + 20 * (Math.random() - 0.5), -2200);
                 if (!simulation.difficultyOptions.isFewerAmmoHeal) {
                     powerUps.spawn(2095, -2300, "heal", false);
                     powerUps.spawn(2095, -2100, "heal", false);
@@ -3935,9 +4618,9 @@ const level = {
         },
         testing() {
             // simulation.enableConstructMode() //tech.giveTech('motion sickness')  //used to build maps in testing mode
-            level.setPosToSpawn(6172, -230); //near exit spawn
-            spawn.mapRect(6100, -205, 300, 200); //something to stand on to get to exit fast
-            // level.setPosToSpawn(150, -450); //original spawn
+            // level.setPosToSpawn(6172, -230); //near exit spawn
+            // spawn.mapRect(6100, -205, 300, 200); //something to stand on to get to exit fast
+            level.setPosToSpawn(150, -450); //original spawn
             level.exit.x = 6507
             level.exit.y = -220
 
@@ -4449,10 +5132,10 @@ const level = {
                 ctx.fillStyle = "rgba(0,255,255,0.05)"
                 ctx.fillRect(2600, -600, 400, 300)
                 //draw shade for ceiling tech
-                ctx.fillStyle = "rgba(68, 68, 68,0.95)"
+                ctx.fillStyle = simulation.draw.mapColor("rgba(68, 68, 68,0.95)")
                 ctx.fillRect(2030, -2800, 150, 1800);
                 ctx.fillRect(2030, 0, 150, 1800);
-                ctx.fillStyle = "rgba(68, 68, 68,0.98)"
+                ctx.fillStyle = simulation.draw.mapColor("rgba(68, 68, 68,0.98)")
                 // ctx.fillRect(-2750, -300, 2600, 125);
                 ctx.fillRect(-2925, -2800, 2775, 2650);
             };
@@ -4514,6 +5197,15 @@ const level = {
             slime.min.y += slime.maxHeight
             slime.max.y = slime.min.y + slime.height
             let finalBoss = null
+            const isPacifistRun = mobs.isPacifist() && !simulation.isCheating //no final boss, just starters
+            let isNullDoorOpen = false
+            let pacifistCycles = 0
+            const pacifistWin = () => { //a pacifist run has no boss to kill, so the run is won after 20 seconds
+                if (isPacifistRun && !isNullDoorOpen && pacifistCycles !== null && ++pacifistCycles > 1200) {
+                    pacifistCycles = null
+                    spawn.winRun()
+                }
+            }
 
             // Match the cable-filled infrastructure of the initial level, scaled to this arena.
             // Each route continues into a wall so the visible room feels like one section of a larger machine.
@@ -4597,6 +5289,7 @@ const level = {
             }
             level.custom = () => {
                 drawInfrastructure()
+                pacifistWin()
                 level.exit.drawAndCheck();
                 level.enter.draw();
 
@@ -4649,7 +5342,8 @@ const level = {
             spawn.mapRect(5400, -300, 400, 400); //right wall
             spawn.mapRect(5700, -3300, 1800, 5100); //right wall
             spawn.mapRect(5403, -650, 400, 450); //blocking exit
-            if (mobs.mobDeaths < level.levelsCleared && !simulation.isCheating) { //pacifist run
+            map[map.length - 1].isBlockingExit = true //removed to open the door to null
+            if (isPacifistRun) {
                 for (let i = 0; i < 250; i++) spawn.starter(1000 + 4000 * Math.random(), -1500 * Math.random())
             } else {
                 spawn.finalBoss(3000, -750)
@@ -4662,6 +5356,7 @@ const level = {
                 level.setPosToSpawn(0, -250);
                 level.custom = () => {
                     drawInfrastructure()
+                    pacifistWin()
                     level.exit.drawAndCheck();
                     level.enter.draw();
 
@@ -4687,16 +5382,18 @@ const level = {
                     ctx.fillRect(-5385 - 300, -550, 300, 250)
                 };
             }
-            if (mobs.mobDeaths < level.levelsCleared && localSettings.loreCount > 5 && !simulation.isCheating) {
+            if (mobs.isPacifist() && localSettings.loreCount > 5 && !simulation.isCheating) {
                 //open door for pacifist run on final lore chapter
+                isNullDoorOpen = true
                 if (simulation.isHorizontalFlipped) {
                     level.exit.x = -5500 - 100;
                 } else {
                     level.exit.x = 5500;
                 }
                 level.exit.y = -320;
-                Matter.Composite.remove(engine.world, map[map.length - 1]);
-                map.splice(map.length - 1, 1);
+                const block = map.find(who => who.isBlockingExit)
+                Matter.Composite.remove(engine.world, block);
+                map.splice(map.indexOf(block), 1);
                 simulation.draw.setPaths(); //redraw map draw path
                 level.levels.push("null")
             }
@@ -4954,41 +5651,25 @@ const level = {
                         }
 
                         const portal1 = level.portal({ x: x - 250, y: -310 }, Math.PI,
-                            { x: x + -3750, y: -2100 }, 0)
+                            { x: x + -3750, y: -2100 }, 0, level.portalExit.straight, level.portalExit.straight)
                         const portal2 = level.portal({ x: x + 250, y: -310 }, 0,
-                            { x: x + 3475, y: -2100 }, Math.PI)
+                            { x: x + 3475, y: -2100 }, Math.PI, level.portalExit.straight, level.portalExit.straight)
                         const portal3 = level.portal({ x: x - 800, y: -2500 }, Math.PI,
-                            { x: x - 175, y: -2500 }, 0)
+                            { x: x - 175, y: -2500 }, 0, level.portalExit.straight, level.portalExit.straight)
                         const portal4 = level.portal({ x: x + 1275, y: -1700 }, Math.PI,
-                            { x: x - 1275, y: -1700 }, 0)
+                            { x: x - 1275, y: -1700 }, 0, level.portalExit.straight, level.portalExit.straight)
                         stationCustom = () => {
-                            portal1[2].query()
-                            portal1[3].query()
-                            portal2[2].query()
-                            portal2[3].query()
-                            portal3[2].query()
-                            portal3[3].query()
-                            portal4[2].query()
-                            portal4[3].query()
+                            portal1.query()
+                            portal2.query()
+                            portal3.query()
+                            portal4.query()
                         }
                         stationCustomTopLayer = () => {
                             // checkGate(gate, gateButton)
-                            portal1[0].draw();
-                            portal1[1].draw();
-                            portal1[2].draw();
-                            portal1[3].draw();
-                            portal2[0].draw();
-                            portal2[1].draw();
-                            portal2[2].draw();
-                            portal2[3].draw();
-                            portal3[0].draw();
-                            portal3[1].draw();
-                            portal3[2].draw();
-                            portal3[3].draw();
-                            portal4[0].draw();
-                            portal4[1].draw();
-                            portal4[2].draw();
-                            portal4[3].draw();
+                            portal1.draw();
+                            portal2.draw();
+                            portal3.draw();
+                            portal4.draw();
                         }
                     },
                     () => { //opening and closing doors
@@ -5093,7 +5774,7 @@ const level = {
                         }, Math.PI, { //right
                             x: x + -1275,
                             y: -650
-                        }, 2 * Math.PI) //right
+                        }, 2 * Math.PI, level.portalExit.straight, level.portalExit.launch) //right
 
                         stationCustom = () => {
                             door1.isClosing = (simulation.cycle % 240) < 120
@@ -5104,15 +5785,11 @@ const level = {
                             door3.openClose(true);
                             door4.isClosing = (simulation.cycle % 240) > 120
                             door4.openClose(true);
-                            portal1[2].query()
-                            portal1[3].query()
+                            portal1.query()
                         }
                         stationCustomTopLayer = () => {
                             // checkGate(gate, gateButton)
-                            portal1[0].draw();
-                            portal1[1].draw();
-                            portal1[2].draw();
-                            portal1[3].draw();
+                            portal1.draw();
                         }
                     },
                     () => { //slime
@@ -5297,31 +5974,23 @@ const level = {
                         }, -Math.PI / 2, { //up
                             x: x + 200,
                             y: -900
-                        }, -Math.PI / 2) //up
+                        }, -Math.PI / 2, level.portalExit.launch, level.portalExit.launch) //up
                         const portal2 = level.portal({
                             x: x + 1275,
                             y: -800
                         }, Math.PI, { //right
                             x: x + -1275,
                             y: -1875
-                        }, 2 * Math.PI) //right
+                        }, 2 * Math.PI, level.portalExit.straight, level.portalExit.launch) //right
 
                         stationCustom = () => {
-                            portal1[2].query(true)
-                            portal1[3].query(true)
-                            portal2[2].query()
-                            portal2[3].query()
+                            portal1.query(true)
+                            portal2.query()
                         }
                         stationCustomTopLayer = () => {
                             // checkGate(gate, gateButton)
-                            portal1[0].draw();
-                            portal1[1].draw();
-                            portal1[2].draw();
-                            portal1[3].draw();
-                            portal2[0].draw();
-                            portal2[1].draw();
-                            portal2[2].draw();
-                            portal2[3].draw();
+                            portal1.draw();
+                            portal2.draw();
                         }
                     },
                     () => { //tower levels and squares
@@ -5728,14 +6397,14 @@ const level = {
                         spawn.mapRect(x + -4700, -7000, 700, 5200);//Left wall
                         spawn.mapRect(x + 4000, -7000, 500, 5200);//Right wall
                         const portals = []
-                        portals.push(level.portal({ x: x - 315, y: -310 }, Math.PI, { x: x - 3985, y: -2110 }, 0))
+                        portals.push(level.portal({ x: x - 315, y: -310 }, Math.PI, { x: x - 3985, y: -2110 }, 0, level.portalExit.straight, level.portalExit.straight))
                         spawn.mapRect(x - 1375, -1100, 2750, 300);
                         spawn.mapRect(x + -300, -525, 600, 550);
 
                         //floor 1 fast with jump in middle
                         movers.push(level.mover(x - 4000, -2025, 2700, 50, 30 * moverDirection))
                         movers.push(level.mover(x + 1300, -2025, 2700, 50, 30 * moverDirection))
-                        portals.push(level.portal({ x: x + 3985, y: -2110 }, Math.PI, { x: x - 3985, y: -3410 }, 0))
+                        portals.push(level.portal({ x: x + 3985, y: -2110 }, Math.PI, { x: x - 3985, y: -3410 }, 0, level.portalExit.straight, level.portalExit.straight))
                         spawn.mapRect(x + -500, -2050, 1000, 150);
                         spawn.mapRect(x + -4200, -2300, 1225, 125);
                         spawn.mapRect(x + 2675, -2350, 1625, 150);
@@ -5744,7 +6413,7 @@ const level = {
                         const elevator1 = level.elevator(x + 1125, -1175, 175, 50, -1600, 0.011, { up: 0.01, down: 0.7 })
 
                         //floor 2  slow with some things to jump on and mobs
-                        portals.push(level.portal({ x: x + 3985, y: -3410 }, Math.PI, { x: x - 3985, y: -5110 }, 0))
+                        portals.push(level.portal({ x: x + 3985, y: -3410 }, Math.PI, { x: x - 3985, y: -5110 }, 0, level.portalExit.straight, level.portalExit.straight))
                         movers.push(level.mover(x - 4000, -3325, 8000, 50, 7 * moverDirection))
                         if (Math.random() < 0.5) {
                             spawn.mapRect(x + 1125, -3625, 325, 200);
@@ -5805,7 +6474,7 @@ const level = {
 
                         //floor 3 fast with bumps
                         spawn.mapRect(x + -4250, -7000, 8475, 325);//roof
-                        portals.push(level.portal({ x: x + 3985, y: -5110 }, Math.PI, { x: x + 320, y: -310 }, 0))
+                        portals.push(level.portal({ x: x + 3985, y: -5110 }, Math.PI, { x: x + 320, y: -310 }, 0, level.portalExit.straight, level.portalExit.straight))
                         movers.push(level.mover(x - 4000, -5025, 8000, 50, 50 * moverDirection))
                         if (Math.random() < 0.5) {
                             spawn.mapVertex(x - 2100, -5050, "-150 0   150 0   5 -150   -5 -150")
@@ -5825,16 +6494,12 @@ const level = {
                         stationCustom = () => {
                             for (let i = 0; i < movers.length; i++) movers[i].push();
                             for (let i = 0; i < portals.length; i++) {
-                                portals[i][2].query()
-                                portals[i][3].query()
+                                portals[i].query()
                             }
                         }
                         stationCustomTopLayer = () => {
                             for (let i = 0; i < portals.length; i++) {
-                                portals[i][0].draw()
-                                portals[i][1].draw()
-                                portals[i][2].draw()
-                                portals[i][3].draw()
+                                portals[i].draw();
                             }
                             elevator0.moveOnTouch()
                             elevator1.moveOnTouch()
@@ -6274,30 +6939,26 @@ const level = {
             //left side mirrors
             level.mirror(-775, -750, 1000, 1550, "right", 1, 0.15, "#040");
             const doorMirror = level.mirror(-775, -1110, 987, 360, "right", 1, 0.15, "#040");
-            if (doorMirror) { // Mirrors are disabled in performance mode.
-                doorMirror.name = "mirrorDoor";
-                const drawMirror = doorMirror.do;
-                doorMirror.do = function () {
-                    ctx.save();
-                    // Move both the reflected source and destination with the door.
-                    ctx.translate(0, doorIn.position.y + 930);
-                    drawMirror.call(this);
-                    ctx.restore();
-                };
-            }
+            doorMirror.name = "mirrorDoor";
+            const drawDoorMirror = doorMirror.do;
+            doorMirror.do = function () {
+                ctx.save();
+                // Move both the reflected source and destination with the door.
+                ctx.translate(0, doorIn.position.y + 930);
+                drawDoorMirror.call(this);
+                ctx.restore();
+            };
             level.mirror(-775, -2600, 1000, 1500, "right", 1, 0.15, "#040");
             //right side mirrors
             const doorOutMirror = level.mirror(2762, -385, 1038, 410, "left", 1, 0.15, "#040");
-            if (doorOutMirror) { // Mirrors are disabled in performance mode.
-                doorOutMirror.name = "mirrorDoor";
-                const drawMirror = doorOutMirror.do;
-                doorOutMirror.do = function () {
-                    ctx.save();
-                    ctx.translate(0, doorOut.position.y + 180);
-                    drawMirror.call(this);
-                    ctx.restore();
-                };
-            }
+            doorOutMirror.name = "mirrorDoor";
+            const drawDoorOutMirror = doorOutMirror.do;
+            doorOutMirror.do = function () {
+                ctx.save();
+                ctx.translate(0, doorOut.position.y + 180);
+                drawDoorOutMirror.call(this);
+                ctx.restore();
+            };
             level.mirror(2750, -7, 1050, 807, "left", 1, 0.15, "#040");
             level.mirror(2750, -2600, 1050, 2225, "left", 1, 0.15, "#040");
             const reactorMirrors = simulation.ephemera.filter(effect => effect.name === "mirror" || effect.name === "mirrorDoor");
@@ -6425,7 +7086,7 @@ const level = {
                             for (let i = 0; i < 9; ++i) powerUps.spawn(1200 + 550 * Math.random(), -1700, "ammo")
                             for (let i = 0; i < 3; ++i) powerUps.spawn(1200 + 550 * Math.random(), -1700, "heal");
                             if (simulation.difficultyMode > 4) for (let i = 0; i < 8; i++) powerUps.spawn(1200 + 550 * Math.random(), -1700, "ammo"); //extra ammo on why difficulty
-                            if (mobs.mobDeaths < level.levelsCleared && !simulation.isCheating) {
+                            if (mobs.isPacifist() && !simulation.isCheating) {
                                 for (let i = 0; i < 250; i++) spawn.starter(300 + 2400 * Math.random(), -1300 - 500 * Math.random())
                             } else {
                                 const count = Math.ceil(Math.pow(simulation.difficultyMode, 0.6))
@@ -6966,7 +7627,7 @@ const level = {
                 if (coverAlpha > 0) {
                     ctx.save()
                     ctx.globalAlpha = coverAlpha
-                    ctx.fillStyle = color.map
+                    ctx.fillStyle = simulation.draw.mapColor()
                     ctx.fillRect(region.x, region.y, region.width, region.height)
                     ctx.restore()
                 }
@@ -7323,7 +7984,7 @@ const level = {
             }, -Math.PI / 2, { //up
                 x: 3675,
                 y: -375
-            }, Math.PI / 2) //down
+            }, Math.PI / 2, level.portalExit.launch, level.portalExit.launch) //down
 
             portal2 = level.portal({
                 x: 6300,
@@ -7331,7 +7992,7 @@ const level = {
             }, -Math.PI / 2, { //up
                 x: 6300,
                 y: -375
-            }, Math.PI / 2) //down
+            }, Math.PI / 2, level.portalExit.launch, level.portalExit.launch) //down
             level.custom = () => {
                 boost1.query();
                 boost2.query();
@@ -7347,10 +8008,8 @@ const level = {
                 ctx.fillRect(-500, -10000, 1800, 30000);
                 ctx.fillRect(5400, -10000, 1800, 30000);
 
-                portal1[2].query()
-                portal1[3].query()
-                portal2[2].query()
-                portal2[3].query()
+                portal1.query()
+                portal2.query()
 
                 ctx.fillStyle = "#cff"
                 if (isFlippedHorizontal) {
@@ -7416,14 +8075,8 @@ const level = {
 
                 ctx.fillStyle = "rgba(0,0,0,0.5)"
                 ctx.fillRect(7175, -1515, 125, 180);
-                portal1[0].draw();
-                portal1[1].draw();
-                portal1[2].draw();
-                portal1[3].draw();
-                portal2[0].draw();
-                portal2[1].draw();
-                portal2[2].draw();
-                portal2[3].draw();
+                portal1.draw();
+                portal2.draw();
             };
 
             // spawn.bodyVertex(0, -1500, "600 -100  600 100  550 150  -550 150  -600 100  -600 -100  -550 -150  550 -150");
@@ -8626,7 +9279,7 @@ const level = {
                                     }, 2 * Math.PI, { //right
                                         x: x + 125,
                                         y: y - 2515
-                                    }, 2 * Math.PI) //right
+                                    }, 2 * Math.PI, level.portalExit.launch, level.portalExit.launch) //right
 
                                     const portal2 = level.portal({
                                         x: x + 1875,
@@ -8634,27 +9287,19 @@ const level = {
                                     }, Math.PI, { //left
                                         x: x + 1875,
                                         y: y - 2090
-                                    }, Math.PI) //left
+                                    }, Math.PI, level.portalExit.straight, level.portalExit.straight) //left
 
                                     doCustom.push(() => {
-                                        portal1[2].query()
-                                        portal1[3].query()
-                                        portal2[2].query()
-                                        portal2[3].query()
+                                        portal1.query()
+                                        portal2.query()
                                         mover1.push();
                                         mover2.push();
                                         mover3.push();
                                         mover4.push();
                                     })
                                     doCustomTopLayer.push(() => {
-                                        portal1[0].draw();
-                                        portal1[1].draw();
-                                        portal1[2].draw();
-                                        portal1[3].draw();
-                                        portal2[0].draw();
-                                        portal2[1].draw();
-                                        portal2[2].draw();
-                                        portal2[3].draw();
+                                        portal1.draw();
+                                        portal2.draw();
                                         mover1.draw();
                                         mover2.draw();
                                         mover3.draw();
@@ -8735,14 +9380,11 @@ const level = {
                                     }
                                     for (let i = 0; i < 4; ++i) spawn.hopBullet(x + 150 + 750 * Math.random(), y + -1600)
                                     for (let i = 0; i < 4; ++i) spawn.hopBullet(x + 1100 + 750 * Math.random(), y + -1600)
-                                    spawn.hopper(x + 1550, y + -775);
-                                    spawn.hopper(x + 500, y + -775);
-                                    spawn.hopper(x + 500, y + -2200);
-                                    spawn.hopper(x + 1100, y + -2200);
-                                    spawn.hopMother(x + 1400, y + -775);
-                                    spawn.hopMother(x + 550, y + -775);
-                                    spawn.hopMother(x + 525, y + -1475);
-                                    spawn.hopMother(x + 1550, y + -1500);
+                                    //hop mobs from this level's tier: T1 hopper, T2 hopperBaby, T3 hopMother, T4 hopsploder
+                                    //never starters, and a third of them are one tier higher, up to T4
+                                    const hopTier = Math.max(1, spawn.mobTierSpawnOrder[Math.min(level.levelsCleared, 13)])
+                                    const hopSpots = [[1550, -775], [500, -775], [500, -2200], [1100, -2200], [1400, -775], [550, -775], [525, -1475], [1550, -1500]]
+                                    hopSpots.forEach(([dx, dy], i) => spawn.randomMobByLevelsCleared(x + dx, y + dy, "hop", Math.min(4, hopTier + (i % 3 === 0 ? 1 : 0))))
                                 }
                             }
                         }
@@ -9166,7 +9808,7 @@ const level = {
                     ctx.fillRect(-325, -950, 300, 225)
                     ctx.fillRect(-1025, -1000, 525, 275);
                     ctx.fillRect(-875, -1600, 225, 275);
-                    ctx.fillStyle = "rgba(68,68,68,0.93)"
+                    ctx.fillStyle = simulation.draw.mapColor("rgba(68,68,68,0.93)")
                     ctx.fillRect(-1575, 150, 2150, 150);
                     for (let i = 0, len = vanish.length; i < len; i++) vanish[i].query()
                 };
@@ -9194,7 +9836,7 @@ const level = {
                     ctx.fillRect(650, -1600, 225, 275);
                     ctx.fillRect(-1050, 50, 325, 225)
                     ctx.fillRect(25, -950, 300, 225)
-                    ctx.fillStyle = "rgba(68,68,68,0.93)"
+                    ctx.fillStyle = simulation.draw.mapColor("rgba(68,68,68,0.93)")
                     ctx.fillRect(-575, 150, 2150, 150);
                     for (let i = 0, len = vanish.length; i < len; i++) vanish[i].query()
                 };
@@ -9267,12 +9909,9 @@ const level = {
                 }
                 door.openClose();
 
-                portal[2].query()
-                portal[3].query()
-                portal2[2].query()
-                portal2[3].query()
-                portal3[2].query()
-                portal3[3].query()
+                portal.query()
+                portal2.query()
+                portal3.query()
                 button.query();
                 button.draw();
 
@@ -9289,18 +9928,9 @@ const level = {
                     hazard2.query();
                 }
 
-                portal[0].draw();
-                portal[1].draw();
-                portal[2].draw();
-                portal[3].draw();
-                portal2[0].draw();
-                portal2[1].draw();
-                portal2[2].draw();
-                portal2[3].draw();
-                portal3[0].draw();
-                portal3[1].draw();
-                portal3[2].draw();
-                portal3[3].draw();
+                portal.draw();
+                portal2.draw();
+                portal3.draw();
             };
             powerUps.spawnStartingPowerUps(-130, -1766);
 
@@ -9420,7 +10050,7 @@ const level = {
                 }, 2 * Math.PI, { //right
                     x: -2475,
                     y: -3140
-                }, 2 * Math.PI) //right
+                }, 2 * Math.PI, level.portalExit.launch, level.portalExit.launch) //right
 
                 portal2 = level.portal({
                     x: -75,
@@ -9428,7 +10058,7 @@ const level = {
                 }, -Math.PI / 2, { //up
                     x: -1325,
                     y: -2150
-                }, -Math.PI / 2) //up
+                }, -Math.PI / 2, level.portalExit.launch, level.portalExit.launch) //up
 
                 portal3 = level.portal({
                     x: -1850,
@@ -9436,7 +10066,7 @@ const level = {
                 }, -Math.PI / 2, { //up
                     x: -2425,
                     y: -600
-                }, -1 * Math.PI / 3) //up left
+                }, -1 * Math.PI / 3, level.portalExit.launch, level.portalExit.launch) //up left
 
                 // level.custom = () => { };
                 // level.customTopLayer = () => {};
@@ -9448,21 +10078,21 @@ const level = {
                 }, Math.PI, { //left
                     x: 2475,
                     y: -3140
-                }, Math.PI) //left
+                }, Math.PI, level.portalExit.straight, level.portalExit.straight) //left
                 portal2 = level.portal({
                     x: 75,
                     y: -2150
                 }, -Math.PI / 2, { //up
                     x: 1325,
                     y: -2150
-                }, -Math.PI / 2) //up
+                }, -Math.PI / 2, level.portalExit.launch, level.portalExit.launch) //up
                 portal3 = level.portal({
                     x: 1850,
                     y: -585
                 }, -Math.PI / 2, { //up
                     x: 2425,
                     y: -600
-                }, -2 * Math.PI / 3) //up left
+                }, -2 * Math.PI / 3, level.portalExit.launch, level.portalExit.launch) //up left
             }
 
         },
@@ -9789,6 +10419,7 @@ const level = {
                     m.fieldPosition.y *= -1
                     m.fieldAngle *= -1
                 }
+                for (let i = 0; i < level.surfacePortals.length; i++) level.surfacePortals[i].flipVertical() //portal field
                 //history
                 for (let i = 0; i < m.history.length; i++) {
                     m.history[i].position.y *= -1
@@ -10228,6 +10859,7 @@ const level = {
                     m.fieldPosition.y *= -1
                     m.fieldAngle *= -1
                 }
+                for (let i = 0; i < level.surfacePortals.length; i++) level.surfacePortals[i].flipVertical() //portal field
                 //history
                 for (let i = 0; i < m.history.length; i++) {
                     m.history[i].position.y *= -1
@@ -10747,7 +11379,7 @@ const level = {
                 ctx.lineTo(-4250, 1010)
                 ctx.lineTo(-4250, 675)
                 ctx.fill()
-                ctx.fillStyle = "rgba(68, 68, 68,0.9)"
+                ctx.fillStyle = simulation.draw.mapColor("rgba(68, 68, 68,0.9)")
                 ctx.fillRect(-50, -4300, 325, 1950);
                 for (let i = 0; i < movers.length; i++) movers[i].draw();
             };
@@ -11433,7 +12065,7 @@ const level = {
                     if (coverAlpha > 0) {
                         ctx.save()
                         ctx.globalAlpha = coverAlpha
-                        ctx.fillStyle = '#474444'//color.map
+                        ctx.fillStyle = simulation.draw.mapColor('#474444')
                         ctx.fillRect(zone.x, zone.y, zone.width, zone.height)
                         ctx.restore()
                     }
@@ -11446,7 +12078,7 @@ const level = {
                 if (playerCoverAlpha > 0) {
                     ctx.save()
                     ctx.globalAlpha = playerCoverAlpha
-                    ctx.fillStyle = color.map
+                    ctx.fillStyle = simulation.draw.mapColor()
                     ctx.fillRect(playerBlackoutZone.x, playerBlackoutZone.y, playerBlackoutZone.width, playerBlackoutZone.height)
                     ctx.restore()
                 }
@@ -11851,7 +12483,7 @@ const level = {
             document.body.style.backgroundColor = "hsl(138, 5%, 82%)";
             color.map = "#444"
             powerUps.spawnStartingPowerUps(1768, 870); //on left side
-            const portal = level.portal({ x: 1070, y: -1485 }, -0.9, { x: 475, y: 50 }, -Math.PI / 2)
+            const portal = level.portal({ x: 1070, y: -1485 }, -0.9, { x: 475, y: 50 }, -Math.PI / 2, level.portalExit.launch, level.portalExit.launch)
             const doorCenterRight = level.door(2787, 775, 25, 225, 195, 5) //x, y, width, height, distance, speed = 1
             const doorCenterLeft = level.door(2537, 775, 25, 225, 195, 5)
             const doorButtonRight = level.door(4462, 1010, 25, 225, 195, 5)
@@ -11897,8 +12529,7 @@ const level = {
                     const drainRate = Math.min(Math.max(0.25, 4 - hazardSlimeRight.min.y / 500), 4)
                     hazardSlimeRight.level(buttonRight.isUp, drainRate)
                 }
-                portal[2].query()
-                portal[3].query()
+                portal.query()
             };
             level.customTopLayer = () => {
                 doorButtonRight.draw();
@@ -11907,11 +12538,8 @@ const level = {
                 doorLeft.draw();
                 hazardSlimeLeft.query();
                 hazardSlimeRight.query();
-                portal[0].draw();
-                portal[1].draw();
-                portal[2].draw();
-                portal[3].draw();
-                ctx.fillStyle = color.map //below portal
+                portal.draw();
+                ctx.fillStyle = simulation.draw.mapColor() //below portal
                 ctx.fillRect(375, 150, 200, 2525);
                 ctx.fillStyle = "rgba(0,0,0,0.1)" //shadows
                 ctx.fillRect(-250, -1550, 1250, 1575);
@@ -12685,7 +13313,7 @@ const level = {
             if (simulation.difficultyMode > 1 || level.levelsCleared > 1) {
                 if (Math.random() < 0.25) {
                     spawn.randomLevelBoss(2800, -1400);
-                } else if (Math.random() < 0.25) {
+                } else if (Math.random() < 0.25) { // eslint-disable-line no-dupe-else-if
                     spawn.laserBoss(2900 + 300 * Math.random(), -2950 + 150 * Math.random());
                 } else if (Math.random() < 0.33) {
                     spawn.laserBoss(1800 + 250 * Math.random(), -2600 + 150 * Math.random());
@@ -13195,7 +13823,6 @@ const level = {
             let boost2
             if (simulation.isHorizontalFlipped) {
                 boost2 = level.boost(4650, -12, 1400, Math.PI / 2 - 0.15);
-                console.log(boost2)
                 level.announceText(50, 20, true)
             } else {
                 boost2 = level.boost(4650, -12, 1400, Math.PI / 2 + 0.15);
@@ -13691,7 +14318,7 @@ const level = {
                 }
                 ctx.fillRect(-3540, -1720, 1, 770)
 
-                ctx.fillStyle = "rgba(64,64,64,0.97)" //hidden section
+                ctx.fillStyle = simulation.draw.mapColor("rgba(64,64,64,0.97)") //hidden section
                 ctx.fillRect(-4450, -750, 800, 200)
                 ctx.fillStyle = "rgba(0,0,0,0.12)"
                 ctx.fillRect(-2500, -1975, 150, 300);
@@ -13896,7 +14523,7 @@ const level = {
                         ctx.fillRect(3540 - 1, -1720, 1, 740)
                     }
 
-                    ctx.fillStyle = "rgba(64,64,64,0.97)" //hidden section
+                    ctx.fillStyle = simulation.draw.mapColor("rgba(64,64,64,0.97)") //hidden section
                     ctx.fillRect(4450 - 800, -750, 800, 200)
                     ctx.fillStyle = "rgba(0,0,0,0.12)"
                     ctx.fillRect(2500 - 150, -1975, 150, 300);

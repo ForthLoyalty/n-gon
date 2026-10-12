@@ -62,11 +62,6 @@ const simulation = {
         // level.mirrorDoorsDraw();
         if (input.fire && m.fireCDcycle < m.cycle) {
             m.fireCDcycle = m.cycle + 15; //fire cooldown       
-            for (let i = 0, len = mob.length; i < len; i++) {
-                if (Vector.magnitudeSquared(Vector.sub(mob[i].position, simulation.mouseInGame)) < mob[i].radius * mob[i].radius) {
-                    console.log(mob[i])
-                }
-            }
         }
         simulation.draw.cons();
         simulation.draw.testing();
@@ -157,7 +152,7 @@ const simulation = {
                 const options = []
                 for (let i = 0; i < tech.tech.length; i++) {
                     const t = tech.tech[i]
-                    if (t.count < t.maxCount && t.allowed() && !t.isBadRandomOption && !t.isLore && !t.isJunk && !t.isAltRealityTech) {
+                    if (t.count < t.maxCount && t.allowed() && !t.isBadRandomOption && !t.isLore && !t.isJunk && !t.isAltRealityTech && !tech.isNonDemolitionKept(t, action.keep ?? null)) { //localization only replaces the tech it didn't keep
                         for (let j = 0; j < t.frequency; j++) options.push(i)
                     }
                 }
@@ -796,6 +791,32 @@ const simulation = {
         }, len * swapPeriod);
     },
     wipe() { }, //set in simulation.startGame
+    warmedShaders: new Set(), //effects already drawn by simulation.warmShaders, the GPU keeps their shaders until the page reloads
+    warmShaders() { //the first time some effects are drawn, the GPU can freeze the game for ~0.3s while it builds new shaders
+        //called after a choice, before unpausing, so the freeze happens while the choice menu is still up
+        //an effect opts in with a warmUp() that draws it at the player the way the game does, in each state that looks different to the GPU
+        let isDrawn = false
+        for (const effect of [m.fieldUpgrades[m.fieldMode], ...tech.tech]) {
+            if (effect.warmUp && (effect === m.fieldUpgrades[m.fieldMode] || effect.count > 0) && !simulation.warmedShaders.has(effect.name)) {
+                simulation.warmedShaders.add(effect.name)
+                ctx.save()
+                ctx.setTransform(1, 0, 0, 1, 0, 0)
+                simulation.camera() //the next frame wipes these draws before they're seen
+                effect.warmUp()
+                ctx.restore()
+                ctx.restore()
+                isDrawn = true
+            }
+        }
+        if (isDrawn) { //copy the canvas and read a pixel, which waits for the GPU to finish the draws
+            const copy = document.createElement("canvas")
+            copy.width = 512 //smaller canvases might not use the GPU
+            copy.height = 512
+            const copyCtx = copy.getContext("2d")
+            copyCtx.drawImage(canvas, 0, 0, 1, 1)
+            copyCtx.getImageData(0, 0, 1, 1)
+        }
+    },
     gravity() {
         function addGravity(bodies, magnitude) {
             for (var i = 0; i < bodies.length; i++) {
@@ -873,23 +894,7 @@ const simulation = {
             }
         }
         simulation.isStartingGame = false
-        if (localSettings.isHideHUD) {
-            simulation.draw.body = function () {
-                ctx.beginPath();
-                for (let i = 0, len = body.length; i < len; ++i) {
-                    let vertices = body[i].vertices;
-                    ctx.moveTo(vertices[0].x, vertices[0].y);
-                    for (let j = 1; j < vertices.length; j++) {
-                        ctx.lineTo(vertices[j].x, vertices[j].y);
-                    }
-                    ctx.lineTo(vertices[0].x, vertices[0].y);
-                }
-                ctx.fillStyle = color.block;
-                ctx.fill();
-            }
-        } else {
-            simulation.draw.body = simulation.draw.bodyDefault
-        }
+        simulation.draw.body = simulation.draw.bodyDefault //undo a community map's custom block drawing from the last run
         simulation.isTextLogOpen = true
         simulation.clearMap()
         level.pendingTransfers = null //a fresh run never inherits arrivals from the previous run
@@ -1029,6 +1034,7 @@ const simulation = {
         m.immuneCycle = 0;
         m.coupling = 0
         m.fieldUpgrades[1].energyHealthRatio = 1
+        m.fieldUpgrades[11].isPreview = false //portal views start off each run
         m.setField(0) //this calls m.couplingChange(), which sets max health and max energy
         m.energy = 1
         //exit testing
@@ -1051,7 +1057,7 @@ const simulation = {
                     if (!(m.cycle % 15)) { //4 times a second
                         const defense = m.defense() //update defense bar
                         if (m.lastCalculatedDefense !== defense) {
-                            document.getElementById("defense-bar").style.width = Math.floor(300 * m.maxHealth * (1 - defense)) + "px";
+                            document.getElementById("defense-bar").style.width = Math.floor(m.healthBarWidth(m.maxHealth) * (1 - defense)) + "px";
                             m.lastCalculatedDefense = defense
                         }
                         const damage = tech.damageAdjustments() //update damage bar
@@ -1170,29 +1176,27 @@ const simulation = {
                         }
                     }
 
+                    //check if player is stuck inside the map
+                    if (m.alive && !simulation.ephemera.some(e => e.name === "stuck") && m.isInsideMap()) {
+                        //check for the next 2 seconds to see if being stuck continues, physics can jiggle a stuck player out for a few cycles
+                        simulation.ephemera.push({
+                            name: "stuck",
+                            count: 0,
+                            free: 0, //cycles not inside the map
+                            do() {
+                                this.count++
+                                if (!m.isInsideMap()) this.free++
+                                if (this.free > 30) {
+                                    simulation.removeEphemera(this)
+                                } else if (this.count > 120) {
+                                    simulation.removeEphemera(this)
+                                    if (m.alive) m.unstuck()
+                                }
+                            },
+                        })
+                    }
+
                     if (!(m.cycle % 420)) { //once every 7 seconds
-                        //check if player is inside the map
-
-                        if (Matter.Query.rayAny(map, m.pos, player.position)) {
-                            // if (Matter.Query.point(map, m.pos).length > 0 || Matter.Query.point(map, player.position).length > 0) {
-                            //check for the next few seconds to see if being stuck continues
-                            simulation.ephemera.push({
-                                count: 240, //cycles before it self removes
-                                do() {
-                                    if (Matter.Query.rayAny(map, m.pos, player.position)) {
-                                        this.count--
-
-                                        if (this.count < 0) {
-                                            simulation.removeEphemera(this)
-                                            Matter.Body.setVelocity(player, { x: 0, y: 0 });
-                                            Matter.Body.setPosition(player, { x: level.enter.x + 50, y: level.enter.y - 20 });
-                                        }
-                                    } else {
-                                        simulation.removeEphemera(this)
-                                    }
-                                },
-                            })
-                        }
                         if (tech.isZeno) {
                             m.takeDamage(0.05 * (tech.isEnergyHealth ? m.energy : m.health), false)
                             // if (tech.isEnergyHealth) {
@@ -1482,6 +1486,8 @@ const simulation = {
             const intersections = [];
 
             for (const obj of domain) {
+                const bounds = obj.bounds; //skip the whole body if it's away from the ray
+                if (rayMaxX < bounds.min.x || bounds.max.x < rayMinX || rayMaxY < bounds.min.y || bounds.max.y < rayMinY) continue;
                 // iterate edges [i] -> [i+1]
                 for (let i = 0; i < obj.vertices.length - 1; i++) {
                     const a = obj.vertices[i];
@@ -1518,6 +1524,7 @@ const simulation = {
             for (let bodyIndex = 0; bodyIndex < map.length; bodyIndex++) {
                 if (bodyIndex === excludedBodyIndex) continue;
                 const obj = map[bodyIndex];
+                if (obj.isRay) continue //tech: ray, you can see through the line left behind
                 const bounds = obj.bounds;
                 if (rayMaxX < bounds.min.x || bounds.max.x < rayMinX ||
                     rayMaxY < bounds.min.y || bounds.max.y < rayMinY) continue;
@@ -1652,10 +1659,13 @@ const simulation = {
         },
 
         circleLoS(pos, radius) {
+            const solid = map.some(who => who.isRay) ? map.filter(who => !who.isRay) : map //tech: ray, you can see through the line left behind
             let test
             function allCircleLineCollisions(c, radius, domain) {
                 var lines = [];
                 for (const obj of domain) {
+                    const bounds = obj.bounds; //skip bodies away from the circle, the extra 1 matches the distance check below
+                    if (c.x + radius + 1 < bounds.min.x || bounds.max.x < c.x - radius - 1 || c.y + radius + 1 < bounds.min.y || bounds.max.y < c.y - radius - 1) continue;
                     for (var i = 0; i < obj.vertices.length - 1; i++) lines.push(simulation.sight.circleLineCollisions(obj.vertices[i], obj.vertices[i + 1], c, radius));
                     lines.push(simulation.sight.circleLineCollisions(obj.vertices[obj.vertices.length - 1], obj.vertices[0], c, radius));
                 }
@@ -1682,31 +1692,28 @@ const simulation = {
             }
 
             var vertices = [];
+            const radiusSquared = radius * radius
             for (const obj of simulation.sight.intersectMap) {
                 for (var i = 0; i < obj.vertices.length; i++) {
                     const vertex = obj.vertices[i];
+                    //skip corners outside the circle, where walls cross the circle is found below with circleCollisions
+                    if ((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2 > radiusSquared) continue
                     const angleToVertex = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                     // const distanceToVertex = Math.sqrt((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2);
                     // const queryPoint = { x: Math.cos(angleToVertex) * (distanceToVertex - 1) + pos.x, y: Math.sin(angleToVertex) * (distanceToVertex - 1) + pos.y }
                     const queryPoint = { x: Math.cos(angleToVertex + Math.PI) + vertex.x, y: Math.sin(angleToVertex + Math.PI) + vertex.y }
 
-                    if (!Matter.Query.segmentAny(map, pos, queryPoint)) {
+                    if (!Matter.Query.segmentAny(solid, pos, queryPoint)) {
                         var distance = Math.sqrt((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2);
                         var endPoint = { x: vertex.x, y: vertex.y }
 
-                        if (distance > radius) {
-                            const angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
-                            endPoint = { x: Math.cos(angle) * radius + pos.x, y: Math.sin(angle) * radius + pos.y }
-                            distance = radius
-                        }
-
-                        var best = simulation.sight.getIntersection(pos, endPoint, map);
+                        var best = simulation.sight.getIntersection(pos, endPoint, solid);
                         if (best.dist >= distance) best = { x: endPoint.x, y: endPoint.y, dist: distance }
                         vertices.push(best)
 
                         var angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                         endPoint = { x: Math.cos(angle + 0.001) * radius + pos.x, y: Math.sin(angle + 0.001) * radius + pos.y }
-                        best = simulation.sight.getIntersection(pos, endPoint, map);
+                        best = simulation.sight.getIntersection(pos, endPoint, solid);
 
                         if (best.dist >= radius) best = { x: endPoint.x, y: endPoint.y, dist: radius }
                         vertices.push(best)
@@ -1714,21 +1721,21 @@ const simulation = {
                         angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                         endPoint = { x: Math.cos(angle - 0.001) * radius + pos.x, y: Math.sin(angle - 0.001) * radius + pos.y }
 
-                        best = simulation.sight.getIntersection(pos, endPoint, map);
+                        best = simulation.sight.getIntersection(pos, endPoint, solid);
                         if (best.dist >= radius) best = { x: endPoint.x, y: endPoint.y, dist: radius }
                         vertices.push(best)
                     }
                 }
             }
 
-            const outerCollisions = allCircleLineCollisions(pos, radius, map);
+            const outerCollisions = allCircleLineCollisions(pos, radius, solid);
             const circleCollisions = [];
             for (const line of outerCollisions) {
                 for (const vertex of line) {
                     const distance = Math.sqrt((vertex.x - pos.x) ** 2 + (vertex.y - pos.y) ** 2)
                     const angle = Math.atan2(vertex.y - pos.y, vertex.x - pos.x);
                     const queryPoint = { x: Math.cos(angle + Math.PI) + vertex.x, y: Math.sin(angle + Math.PI) + vertex.y }
-                    if (Math.abs(distance - radius) < 1 && !Matter.Query.segmentAny(map, pos, queryPoint)) circleCollisions.push(vertex)
+                    if (Math.abs(distance - radius) < 1 && !Matter.Query.segmentAny(solid, pos, queryPoint)) circleCollisions.push(vertex)
                 }
             }
             for (var i = 0; i < circleCollisions.length; i++) {
@@ -1758,9 +1765,12 @@ const simulation = {
 
                 // shoot ray between them
                 var endPoint = { x: Math.cos(newAngle) * radius + pos.x, y: Math.sin(newAngle) * radius + pos.y }
-                var best = simulation.sight.getIntersection(pos, endPoint, map);
+                var best = simulation.sight.getIntersection(pos, endPoint, solid);
                 vertices.push(vertex);
                 if (best.dist <= radius) vertices.push({ x: best.x, y: best.y })
+            }
+            if (vertices.length === 0 && !Matter.Query.point(solid, pos).length) { //no walls in the circle, so see the whole circle
+                for (let angle = -Math.PI; angle < Math.PI; angle += Math.PI / 2) vertices.push({ x: Math.cos(angle) * radius + pos.x, y: Math.sin(angle) * radius + pos.y })
             }
             vertices.sort((a, b) => Math.atan2(a.y - pos.y, a.x - pos.x) - Math.atan2(b.y - pos.y, b.x - pos.x));
             return vertices;
@@ -1785,6 +1795,7 @@ const simulation = {
             //runs at each new level to store the path for the map since the map doesn't change
             simulation.draw.mapPath = new Path2D();
             for (let i = 0, len = map.length; i < len; ++i) {
+                if (map[i].isRay) continue //tech: ray, draws its own walls
                 let vertices = map[i].vertices;
                 simulation.draw.mapPath.moveTo(vertices[0].x, vertices[0].y);
                 for (let j = 1; j < vertices.length; j += 1) {
@@ -1792,11 +1803,27 @@ const simulation = {
                 }
                 simulation.draw.mapPath.lineTo(vertices[0].x, vertices[0].y);
             }
+            if (simulation.draw.drawMapPath === simulation.draw.drawMapSightSetting) simulation.draw.lineOfSightPrecalculation() //keep the line of sight setting up to date when the map changes
+        },
+        isLineOfSight() { //subway, the line of sight setting, and community maps with line of sight all replace drawMapPath
+            return simulation.draw.drawMapPath !== simulation.draw.drawMapPathDefault
+        },
+        mapColor(mapColor = color.map) { //for things drawn to look like the map, like covers over hidden areas, line of sight doesn't fill the map so they match the background instead
+            return simulation.draw.isLineOfSight() ? document.body.style.backgroundColor : mapColor
+        },
+        updateLineOfSightSetting() { //line of sight setting draws every level like subway, levels with their own map drawing are left alone
+            if (localSettings.isLineOfSight && simulation.draw.drawMapPath === simulation.draw.drawMapPathDefault) {
+                simulation.draw.drawMapPath = simulation.draw.drawMapSightSetting
+                simulation.draw.lineOfSightPrecalculation() //required precalculation for line of sight
+            } else if (!localSettings.isLineOfSight && simulation.draw.drawMapPath === simulation.draw.drawMapSightSetting) {
+                simulation.draw.drawMapPath = simulation.draw.drawMapPathDefault
+            }
         },
         lineOfSightPrecalculation() {
             simulation.sight.intersectMap = [];
             for (let i = 0; i < map.length; i++) {
                 const obj = map[i];
+                if (obj.isRay) continue //tech: ray, you can see through the line left behind
                 const newVertices = [];
                 for (let j = 0; j < obj.vertices.length; j++) {
                     const vertex = obj.vertices[j];
@@ -1824,7 +1851,10 @@ const simulation = {
             ctx.fillStyle = color.map;
             ctx.fill(simulation.draw.mapPath);
         },
-        drawMapSight() {
+        drawMapSightSetting() {
+            simulation.draw.drawMapSight(true)
+        },
+        drawMapSight(isShadeSight = false) {
             if (!simulation.isTimeSkipping) {
                 const pos = m.pos
                 const radius = 4000
@@ -1861,6 +1891,11 @@ const simulation = {
                     ctx.globalCompositeOperation = "destination-in";
                     ctx.fillStyle = "#000";
                     ctx.fill();
+                    if (isShadeSight) { //darken what you can see behind everything drawn so far, subway does this with a rect in level.custom
+                        ctx.globalCompositeOperation = "destination-over";
+                        ctx.fillStyle = "rgba(0,0,0,0.1)";
+                        ctx.fill();
+                    }
                     ctx.globalCompositeOperation = "source-over";
 
                     // make map visible
@@ -1881,11 +1916,13 @@ const simulation = {
                 }
                 ctx.lineTo(vertices[0].x, vertices[0].y);
             }
-            ctx.lineWidth = 2;
             ctx.fillStyle = color.block;
             ctx.fill();
-            ctx.strokeStyle = color.blockS;
-            ctx.stroke();
+            if (!localSettings.isHideHUD) { //performance mode: no stroke on blocks, checked every frame so the pause menu toggle applies right away
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = color.blockS;
+                ctx.stroke();
+            }
         },
         body() { },
         cons() {
@@ -2498,7 +2535,6 @@ const simulation = {
                         if (level.isProcedural) {
                             simulation.outputMapString(`spawn.mapRect(x+${x}, ${y}, ${dx}, ${dy});\n`);
                         } else if (level.isVerticalFLipLevel) {
-                            console.log('hi')
                             simulation.outputMapString(`spawn.mapRect(${x}, ${y}, ${dx}, ${dy});\n`);
                             simulation.outputMapString(`//spawn.mapRect(${x}, ${-y - dy}, ${dx}, ${dy});\n`);
                         } else {
@@ -2572,12 +2608,12 @@ const simulation = {
             out += simulation.constructMapString[i];
             outHTML += "<div>" + simulation.constructMapString[i] + "</div>"
         }
-        console.log(out)
+        console.log(out) // eslint-disable-line no-console
         navigator.clipboard.writeText(out).then(function () {
             /* clipboard successfully set */
         }, function () {
             /* clipboard write failed */
-            console.log('copy failed')
+            console.log('copy failed') // eslint-disable-line no-console
         });
         document.getElementById("construct").innerHTML = outHTML
     },
