@@ -463,7 +463,7 @@ const powerUps = {
                          <strong>chrome</strong>                 <strong>firefox</strong>               <strong>safari</strong>
  <strong>Win/Linux/ChromeOS:</strong> Ctrl + Shift + J       Ctrl + Shift + J      Ctrl + Alt + C
               <strong>macOS:</strong> Cmd + Option + J       Cmd + Shift + J       Option + Cmd + C
-            <strong>in-game:</strong> press ${input.key.pause.replace(/^Key/, "")} to pause, then type in the console log box</pre></div><div class="choose-grid-module" id="exit" style="text-align: center;font-size: 1.3rem;">exit</div>`
+            <strong>in-game:</strong> press ${input.key.pause.replace(/^Key/, "")} to pause, then open the console menu on the left</pre></div><div class="choose-grid-module" id="exit" style="text-align: center;font-size: 1.3rem;">exit</div>`
             document.getElementById("choose-grid").innerHTML = text
             //show level info
             document.getElementById("choose-grid").style.opacity = "1"
@@ -552,15 +552,16 @@ const powerUps = {
         options: [
             { key: "isHalfDamage", required: true, text: '<strong>0.5x</strong> <strong class="color-d" data-help="damage">damage</strong>' },
             { key: "isDoubleDamageTaken", required: true, text: '<strong>2x</strong> <strong class="color-defense" data-help="defense">damage taken</strong>' },
-            // { key: "isMobTier23", required: true, text: 'increase mob <strong class="color-tier" data-help="tier">TIER</strong><br>after every <strong>4</strong> levels' },
-            { key: "isMobTier23", required: true, text: '<strong class="color-tier" data-help="tier">TIER</strong> <strong>2</strong> and <strong class="color-tier" data-help="tier">TIER</strong> <strong>3</strong> mobs' },
-            { key: "isSecondBoss", required: true, get text() { return `<strong>2 bosses</strong> per level`; } },
+            { key: "isMobTier23", required: true, text: '<strong class="color-tier" data-help="tier">TIER</strong> <strong>3</strong> mobs' },
+            { key: "isSecondBoss", required: true, get text() { return `<strong>2</strong> bosses each level`; } },
             { key: "isMobTier4", text: '<strong class="color-tier" data-help="tier">TIER</strong> <strong>4</strong> mobs' },
             { key: "isDoubleMobs", text: '<strong>2x</strong> mobs' },
-            { key: "isFewerAmmoHeal", get text() { return `2 fewer ${powerUps.orb.heal()} ${powerUps.orb.ammo()} each level`; } },
+            { key: "isNextTierMobs", text: 'next <strong class="color-tier" data-help="tier">TIER</strong> mob each level' }, //each level starts with a mob 1 tier above the level's highest tier mobs, up to T5
+            { key: "isFasterMobs", text: '<strong>1.2x</strong> mob speed' }, //each mob type has its own speed up, see spawn.fasterMobs and spawn.fasterBoss
+            { key: "isFewerAmmoHeal", get text() { return `<strong>2</strong> fewer ${powerUps.orb.heal()} ${powerUps.orb.ammo()} each level`; } },
             { key: "isLateEquipment", get text() { return `${powerUps.orb.gun()} ${powerUps.orb.field()} spawn later`; } },
-            { key: "isFewerResearch", get text() { return `1 fewer ${powerUps.orb.research()} each level`; } },
-            { key: "isFewerTech", get text() { return `4 fewer ${powerUps.orb.tech()} spawn`; } },
+            { key: "isFewerResearch", get text() { return `<strong>1</strong> fewer ${powerUps.orb.research()} each level`; } },
+            { key: "isFewerTech", get text() { return `<strong>4</strong> fewer ${powerUps.orb.tech()} spawn`; } },
             { key: "isConstraint", text: 'random <strong class="constraint" data-help="constraint">constraints</strong>' },
             { key: "isStrongerConstraints", requires: "isConstraint", text: 'stronger <strong class="constraint" data-help="constraint">constraints</strong>' },
             { key: "isExtraHalfDamage", text: '<strong>0.5x</strong> <strong class="color-d" data-help="damage">damage</strong>' },
@@ -629,8 +630,14 @@ const powerUps = {
         },
         pauseText() { //a small copy of the power up grid, options that aren't selected are faded out
             const o = simulation.difficultyOptions;
-            const section = options => `<div class="pause-difficulty-section">${options.map(option => `<div class="pause-difficulty-option${o[option.key] ? " pause-difficulty-selected" : ""}"><span>${option.text}</span></div>`).join("")}</div>`;
-            return section(this.options.filter(option => option.required)) + section(this.options.filter(option => !option.required));
+            const section = options => options.length ? `<div class="pause-difficulty-section">${options.map(option => `<div class="pause-difficulty-option${o[option.key] ? " pause-difficulty-selected" : ""}"><span>${option.text}</span></div>`).join("")}</div>` : "";
+            const optional = this.options.filter(option => !option.required);
+            let text = section(this.options.filter(option => option.required));
+            if (o.isConstraint && level.constraintDescription1) { //the active constraint fills the whole row below the row with random constraints
+                const rowEnd = 2 * Math.floor(optional.findIndex(option => option.key === "isConstraint") / 2) + 2;
+                return text + section(optional.slice(0, rowEnd)) + `<div class="pause-difficulty-option pause-difficulty-selected"><span>active constraint: <span class="constraint">${level.constraintDescription1}</span></span></div>` + section(optional.slice(rowEnd));
+            }
+            return text + section(optional);
         },
         size() {
             return 80 / Math.pow(simulation.difficultyMode, 1.5);
@@ -683,7 +690,7 @@ const powerUps = {
                     button.disabled = !difficulty.allowed(option, selected);
                     button.classList.toggle('difficulty-option-selected', selected[option.key]);
                     button.setAttribute('aria-checked', String(selected[option.key]));
-                    button.title = button.disabled ? (option.requires ? 'requires random constraint' : 'requires all four starting options') : '';
+                    button.title = button.disabled ? (option.requires ? `requires ${difficulty.options.find(o => o.key === option.requires).text.replace(/<[^>]*>/g, '')}` : 'requires all four starting options') : '';
                 }
             };
             for (const option of difficulty.options) {
@@ -732,6 +739,8 @@ const powerUps = {
     qubit: {
         name: "qubit",
         color: "#fff",
+        count: 0, //qubits used this run, kept in alternate realities
+        damageCount: 0, //qubits used with interference
         size() {
             return 13;
         },
@@ -740,11 +749,27 @@ const powerUps = {
         },
         effect() {
             powerUps.animatePowerUpGrab('rgba(255,255,255,0.7)');
+            powerUps.qubit.count++;
             m.damageReduction *= 0.97;
-            if (tech.isQubitDamage) m.damageDone *= 1.03;
+            if (tech.isQubitDamage) {
+                powerUps.qubit.damageCount++;
+                m.damageDone *= 1.03;
+            }
             simulation.inGameConsole(`${powerUps.orb.qubit(1)} <span class='color-var'>m</span>.<span class='color-defense'>damageReduction</span> <span class='color-symbol'>*=</span> 0.97 <em>//qubit</em>${tech.isQubitDamage ? `<br><span class='color-var'>m</span>.<span class='color-d'>damageDone</span> <span class='color-symbol'>*=</span> 1.03 <em>//interference</em>` : ""}`);
             m.displayHealth();
             powerUps.Casimir.random();
+        },
+        switchWorlds(isApplied) { //alternate realities keep qubits, but more than 5 are randomized from 0.5x to 1.5x
+            const scale = this.count > 5 ? 0.5 + Math.random() : 1;
+            const count = Math.round(this.count * scale);
+            const damageCount = Math.round(this.damageCount * scale);
+            //isApplied: the old qubits are still in m.damageReduction, because localization skipped resetAllTech
+            m.damageReduction *= 0.97 ** (count - (isApplied ? this.count : 0));
+            m.damageDone *= 1.03 ** (damageCount - (isApplied ? this.damageCount : 0));
+            const isChanged = count !== this.count;
+            this.count = count;
+            this.damageCount = damageCount;
+            return isChanged;
         }
     },
     Casimir: {
@@ -777,8 +802,8 @@ const powerUps = {
             if (tech.isCasimirRandom) {
                 if (Math.random() < 0.25) {
                     m.energy = 0.001
-                } else if (m.energy < m.maxEnergy) {
-                    m.addEnergy(m.maxEnergy * 4 - m.energy)
+                } else if (m.energy < 10) {
+                    m.addEnergy(10 - m.energy)
                     for (let i = 0; i < 6; i++) simulation.energyGenGraphic()
                 }
             }
@@ -975,10 +1000,15 @@ const powerUps = {
         },
         spawnHealingZone(position) {
             const x = position.x, y = position.y;
+            const onLevel = level.onLevel;
             simulation.ephemera.push({
                 name: "healingZone",
                 endCycle: m.cycle + 240, //m.cycle keeps running while time is stopped
                 do() {
+                    if (level.onLevel !== onLevel) {
+                        simulation.removeEphemera(this);
+                        return;
+                    }
                     const progress = Math.max(0, Math.min(1, 1 - (this.endCycle - m.cycle) / 240));
                     const color = powerUps.healGiveMaxEnergy ? powerUps.Casimir.color : powerUps.heal.color
                     ctx.save();
@@ -1004,8 +1034,13 @@ const powerUps = {
                             if (powerUps.healGiveMaxEnergy) { //ionization energy: fill energy instead of health
                                 if (m.energy < m.maxEnergy) m.energy = m.maxEnergy
                             } else if (!tech.isEnergyHealth) {
+                                const healOutput = m.maxHealth - m.health
                                 m.health = m.maxHealth;
                                 m.displayHealth();
+                                if (healOutput > 0) {
+                                    simulation.dmgNumbers({ x: m.pos.x, y: m.pos.y - 13 }, Math.ceil(100 * healOutput).toFixed(0), "rgba(0, 238, 187,", 60, true)
+                                    simulation.inGameConsole(`<div class="circle-grid heal"></div> <span class='color-var'>m</span>.health <span class='color-symbol'>+=</span> ${healOutput.toFixed(3)} <em>//Brownian ratchet</em>`)
+                                }
                             }
                         }
                         for (const who of mob) {
@@ -1045,7 +1080,11 @@ const powerUps = {
                         });
                     } else if (overHeal > 0.2) { //if leftover heals spawn a new spammer heal power up
                         requestAnimationFrame(() => {
-                            powerUps.directSpawn(this.position.x, this.position.y, "heal", true, Math.min(1, overHeal) * 40 * (simulation.healScale ** 0.25))//    directSpawn(x, y, name, moving = true, mode = null, size = powerUps[name].size()) {
+                            const remainder = powerUps.directSpawn(this.position.x, this.position.y, "heal", true, Math.min(1, overHeal) * 40 * (simulation.healScale ** 0.25))
+                            if (remainder) {
+                                if (this.isPortalCopy) remainder.isPortalCopy = true
+                                if (this.isPortalProcessed) remainder.isPortalProcessed = true
+                            }
                         });
                     }
                     if (tech.isHealBrake) {
@@ -1668,7 +1707,7 @@ const powerUps = {
                 for (let i = 0; i < 3; i++)simulation.energyGenGraphic()
             }
         }
-        if (tech.isMineDrop && bullet.length < 150 && Math.random() < 0.5) {
+        if (tech.isMineDrop && b.shotCount() < 150 && Math.random() < 0.5) {
             if (tech.isLaserMine && input.down) {
                 b.laserMine(who.position)
             } else {
@@ -1694,11 +1733,11 @@ const powerUps = {
         }
         if (isRepeat && tech.isBoostPowerUps && Math.random() < 0.14 * dropScale) powerUps.spawn(x, y, "boost"); //exciton's first roll is at the end of spawnRandomPowerUp
     },
-    spawnRandomPowerUp(x, y) { //mostly used after mob dies,  doesn't always return a power up
+    spawnRandomPowerUp(x, y, isAmmoHealAllowed = true) { //mostly used after mob dies, doesn't always return a power up; starting rewards can suppress only ammo/heal outcomes
         const dropScale = tech.isCrystallography && powerUp.length === 0 ? 3 : 1;
         powerUps.spawnTechPowerUps(x, y)
         if (!tech.isEnergyHealth && (Math.random() * Math.random() - 0.3 > Math.sqrt(m.health)) || Math.random() < 0.04 * dropScale) { //spawn heal chance is higher at low health
-            powerUps.spawn(x, y, "heal");
+            if (isAmmoHealAllowed) powerUps.spawn(x, y, "heal");
             return;
         }
         if (Math.random() < 0.0007 * (3 - b.inventory.length)) { //a new gun has a low chance for each not acquired gun up to 3
@@ -1711,8 +1750,10 @@ const powerUps = {
         }
         // 0.03 * (level.levelsCleared > 7) + 0.05 * (level.levelsCleared > 10)
         if ((Math.random() < (0.15 + 0.002 * level.levelsCleared) * dropScale) && b.inventory.length > 0) {
-            powerUps.spawn(x, y, "ammo");
-            if (Math.random() < 0.2 * (simulation.difficultyMode - 4)) powerUps.spawn(x + 20, y, "ammo");
+            if (isAmmoHealAllowed) {
+                powerUps.spawn(x, y, "ammo");
+                if (Math.random() < 0.2 * (simulation.difficultyMode - 4)) powerUps.spawn(x + 20, y, "ammo");
+            }
             return;
         }
         if (tech.isBoostPowerUps && Math.random() < 0.14 * dropScale) {
@@ -1743,17 +1784,17 @@ const powerUps = {
             }
             powerUps.spawn(x + 25, y - 25, "ammo", false);
             if (simulation.difficultyMode > 6) powerUps.spawn(x - 25, y - 50, "ammo", false);
-            if (tech.isAddRemoveMaxHealth) {
-                powerUps.spawn(x + 20, y, "tech", false)
-                // powerUps.spawn(x - 20, y, "research", false)
-                powerUps.spawn(x - 40, y, "research", false)
-                powerUps.spawn(x + 40, y, "research", false)
-                // powerUps.spawn(x, y + 20, "research", false)
-                powerUps.spawn(x, y - 20, "heal", false)
-                powerUps.spawn(x, y + 40, "heal", false)
-                powerUps.spawn(x, y - 40, "heal", false)
-            }
             const repeat = tech.isMobDeathRepeat ? 2 : 1 //double beta decay doubles these mob death tech
+            if (tech.isAddRemoveMaxHealth) {
+                for (let i = 0; i < repeat; i++) {
+                    powerUps.spawn(x + 20, y, "tech", false)
+                    powerUps.spawn(x - 40, y, "research", false)
+                    powerUps.spawn(x + 40, y, "research", false)
+                    powerUps.spawn(x, y - 20, "heal", false)
+                    powerUps.spawn(x, y + 40, "heal", false)
+                    powerUps.spawn(x, y - 40, "heal", false)
+                }
+            }
             if (tech.isResearchReality) powerUps.spawnDelay("research", 6 * repeat, 2, { x: x, y: y })
             if (tech.isBanish) powerUps.spawnDelay("research", (simulation.difficultyOptions.isSecondBoss ? 2 : 4) * repeat, 2, { x: x, y: y })
             if (tech.isCouplingNoHit) powerUps.spawnDelay("coupling", 9 * repeat, 2, { x: x, y: y })
@@ -1766,9 +1807,9 @@ const powerUps = {
             powerUps.spawn(x, y, "ammo", false);
         }
     },
-    addResearchToLevel() { //add a random power up to a location that has a mob,  mostly used to give each level a research
+    addResearchToLevel() { //add a research to a location that has a mob, gives each level a research
         if (simulation.difficultyOptions.isFewerResearch) return;
-        if ((level.levelsCleared < 17 - simulation.difficultyMode * 3) && mob.length) { //don't spawn late game
+        if (mob.length) {
             const index = Math.floor(Math.random() * mob.length)
             powerUps.spawn(mob[index].position.x, mob[index].position.y, "research");
         }
@@ -1790,8 +1831,8 @@ const powerUps = {
             } else {
                 for (let i = 0; i < 4; i++) powerUps.spawnRandomPowerUp(x, y);
             }
-        } else if (!simulation.difficultyOptions.isFewerAmmoHeal) { //after the first 4 levels just spawn random power ups
-            for (let i = 0; i < 3; i++) powerUps.spawnRandomPowerUp(x, y);
+        } else { //after the first 4 levels, keep all bonus rolls and suppress ammo/heal outcomes on only two rolls
+            for (let i = 0; i < 3; i++) powerUps.spawnRandomPowerUp(x, y, !simulation.difficultyOptions.isFewerAmmoHeal || i === 0);
         }
     },
     ejectTech(choose = 'random', isOverride = false) {
@@ -2015,6 +2056,7 @@ const powerUps = {
         if (moving) Matter.Body.setVelocity(powerUp[index], { x: (Math.random() - 0.5) * 15, y: Math.random() * -9 - 3 });
         Composite.add(engine.world, powerUp[index]);
         if (name === "field") powerUps.isFieldSpawned = true;
+        return powerUp[index]
     },
     powerUpStorage: [],//used when power ups are sent to the next level (for the constraint, level.isNextLevelPowerUps)
 };
